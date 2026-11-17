@@ -14,6 +14,14 @@ const KIND_LABEL: Record<string, string> = {
   circuit_close: '熔断恢复',
   pause: '暂停自动化',
   resume: '恢复自动化',
+  environment_drift: '环境漂移',
+  environment_shift: '出口变动',
+  environment_ack: '环境确认',
+  canary_start: '开始灰度',
+  canary_end: '结束灰度',
+  canary_pass: '灰度通过',
+  canary_promote: '放开灰度',
+  canary_rotate: '轮换金丝雀',
 };
 
 interface Props {
@@ -22,6 +30,14 @@ interface Props {
 
 function detailText(detail: Record<string, unknown>): string {
   const parts: string[] = [];
+  if (typeof detail.label === 'string' && detail.label) parts.push(`账号 ${detail.label}`);
+  if (typeof detail.nextLabel === 'string' && detail.nextLabel) parts.push(`切换到 ${detail.nextLabel}`);
+  if (typeof detail.days === 'number' && typeof detail.required === 'number') {
+    parts.push(`第 ${detail.days}/${detail.required} 天`);
+  }
+  if (typeof detail.from === 'string' && typeof detail.to === 'string') {
+    parts.push(`${detail.from} → ${detail.to}`);
+  }
   if (typeof detail.status === 'string') parts.push(detail.status);
   if (typeof detail.errorCode === 'string' && detail.errorCode) parts.push(detail.errorCode);
   if (typeof detail.reason === 'string') parts.push(detail.reason);

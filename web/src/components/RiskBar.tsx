@@ -48,7 +48,7 @@ export function RiskBar({ risk, busy, onPause, onReset, onAck, onCanary, onEnvAc
             : canary.length > 0
               ? `${canary.map((platform) => platform.name).join('、')} 灰度观察中`
               : historical
-                ? '已恢复，观察中'
+                ? '近期有挑战记录'
                 : '风险控制正常';
 
   const description = risk.paused
