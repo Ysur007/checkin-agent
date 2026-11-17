@@ -12,7 +12,7 @@ import {
   saveBreaker,
 } from '../db/repo.js';
 import { getLoadedPlugin, listLoadedPlugins } from '../plugins/loader.js';
-import { getProvider } from '../providers/catalog.js';
+import { CUSTOM_PROVIDER_ID, getProvider } from '../providers/catalog.js';
 import { getAutomationPolicy } from '../providers/policy.js';
 import { nowIso } from '../db/repo.js';
 import type { CircuitBreakerRow, CircuitState, RunStatus } from '../types.js';
@@ -210,6 +210,7 @@ export function resetAllBreakers(): void {
 }
 
 function platformName(platformId: string): string {
+  if (platformId === CUSTOM_PROVIDER_ID) return '自定义平台';
   return getProvider(platformId)?.name ?? getLoadedPlugin(platformId)?.name ?? platformId;
 }
 
