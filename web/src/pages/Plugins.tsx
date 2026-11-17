@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { DiscoverPlugin, PluginDto, PluginsData } from '../types';
+import type { PluginDto, PluginsData } from '../types';
 import { get, post } from '../api';
 import type { ToastTone } from '../components/Toast';
 import { StatusPill } from '../components/StatusPill';
 import { IconExternal, IconPuzzle, IconRefresh, IconShield } from '../components/icons';
 
-type Tab = 'builtin' | 'installed' | 'discover';
+type Tab = 'builtin' | 'installed';
 
 interface Props {
   notify: (message: string, tone?: ToastTone) => void;
@@ -85,36 +85,6 @@ function PluginCard({
   );
 }
 
-function DiscoverCard({ item }: { item: DiscoverPlugin }) {
-  return (
-    <article className="plugin-card plugin-card-discover">
-      <div className="card-head">
-        <div className="platform-id">
-          <span className="platform-icon platform-icon-muted" aria-hidden="true">
-            <IconPuzzle size={16} />
-          </span>
-          <div>
-            <h3>{item.name}</h3>
-            <p>{item.description}</p>
-          </div>
-        </div>
-        <StatusPill status="skipped" label="待适配" />
-      </div>
-      <div className="plugin-grid">
-        <div>
-          <span>扩展方式</span>
-          <strong>manifest.json + adapter.json</strong>
-        </div>
-        <div>
-          <span>安全边界</span>
-          <strong>首版不执行第三方代码</strong>
-        </div>
-      </div>
-      <p className="plugin-foot">把平台目录放进 /data/plugins 后可被扫描；启用前需要人工审查权限与请求地址。</p>
-    </article>
-  );
-}
-
 export function Plugins({ notify }: Props) {
   const [data, setData] = useState<PluginsData | null>(null);
   const [tab, setTab] = useState<Tab>('builtin');
@@ -158,8 +128,7 @@ export function Plugins({ notify }: Props) {
     }
   };
 
-  const list =
-    tab === 'discover' ? (data?.discover ?? []) : tab === 'installed' ? (data?.installed ?? []) : (data?.builtin ?? []);
+  const list = tab === 'installed' ? (data?.installed ?? []) : (data?.builtin ?? []);
 
   return (
     <div className="page">
@@ -169,7 +138,6 @@ export function Plugins({ notify }: Props) {
             [
               ['builtin', '内置'],
               ['installed', '已安装'],
-              ['discover', '发现'],
             ] as Array<[Tab, string]>
           ).map(([value, label]) => (
             <button
@@ -181,7 +149,7 @@ export function Plugins({ notify }: Props) {
               onClick={() => setTab(value)}
             >
               {label}
-              <span>{value === 'discover' ? data?.discover.length ?? 0 : data?.installed.length ?? 0}</span>
+              <span>{data?.installed.length ?? 0}</span>
             </button>
           ))}
         </div>
@@ -192,11 +160,9 @@ export function Plugins({ notify }: Props) {
       </div>
 
       <div className="plugins-grid">
-        {tab === 'discover'
-          ? list.map((item) => <DiscoverCard key={(item as DiscoverPlugin).id} item={item as DiscoverPlugin} />)
-          : (list as PluginDto[]).map((plugin) => (
-              <PluginCard key={plugin.id} plugin={plugin} onToggle={() => void toggle(plugin)} busy={busy} />
-            ))}
+        {(list as PluginDto[]).map((plugin) => (
+          <PluginCard key={plugin.id} plugin={plugin} onToggle={() => void toggle(plugin)} busy={busy} />
+        ))}
       </div>
 
       <div className="notice notice-neutral">
@@ -204,8 +170,8 @@ export function Plugins({ notify }: Props) {
         <div>
           <strong>插件安全边界</strong>
           <p>
-            首版只执行随镜像打包的内置插件。第三方目录可以被扫描和展示，但不会执行 TS/JS 钩子，也不提供 zip
-            上传或远程市场；复杂平台需要单独做沙箱与权限审计。
+            首版只执行随镜像打包的内置插件，不执行 TS/JS 钩子，也不提供 zip 上传或远程市场；新增平台需要先在
+            <code>plugins/</code> 里写明 manifest 与 adapter，再登记到平台目录。
           </p>
         </div>
       </div>

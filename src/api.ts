@@ -440,12 +440,6 @@ export async function createApp(deps: AppDeps) {
             .map((account) => ({ id: account.id, label: account.label, status: account.status })),
         };
       }),
-      custom: {
-        id: CUSTOM_PROVIDER_ID,
-        name: '自定义平台',
-        description: '填写登录页地址，捕获任意平台的 Cookie',
-        accountCount: counts.get(CUSTOM_PROVIDER_ID) ?? 0,
-      },
     };
   });
 
@@ -699,7 +693,7 @@ export async function createApp(deps: AppDeps) {
   app.post('/api/accounts', async (request, reply) => {
     const body = request.body as { providerId?: string; loginUrl?: string; label?: string };
     const providerId = String(body?.providerId ?? '').trim();
-    if (!providerId || (!isKnownProvider(providerId) && providerId !== CUSTOM_PROVIDER_ID)) {
+    if (!providerId || !isKnownProvider(providerId)) {
       return reply.code(400).send({ error: { code: 'PROVIDER_INVALID', message: '请选择平台' } });
     }
     const provider = getProvider(providerId);

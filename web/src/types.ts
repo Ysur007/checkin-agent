@@ -200,12 +200,6 @@ export interface ProviderCatalogItem {
 
 export interface ProvidersData {
   items: ProviderCatalogItem[];
-  custom: {
-    id: string;
-    name: string;
-    description: string;
-    accountCount: number;
-  };
 }
 
 export interface LoginSessionDto {
