@@ -171,7 +171,15 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
           <div className="stat-bar" aria-hidden="true">
             <i style={{ width: `${percent}%` }} />
           </div>
-          <p>{stats.progressTotal === 0 ? '还没有可签到的账号' : percent >= 100 ? '全部账号均已签到' : `还有 ${stats.progressTotal - stats.progressDone} 个账号待签到`}</p>
+          <p>
+            {stats.progressTotal === 0
+              ? stats.accounts === 0
+                ? '还没有可签到的账号'
+                : `${stats.accounts} 个账号仅登录，签到待适配`
+              : percent >= 100
+                ? '可签到账号均已签到'
+                : `还有 ${stats.progressTotal - stats.progressDone} 个可签账号待签到`}
+          </p>
         </div>
         <div className="stat-card">
           <span>定时签到</span>

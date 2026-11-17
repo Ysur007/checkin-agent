@@ -283,7 +283,9 @@ dt {
 }
 
 .btn-primary:disabled {
-  opacity: 0.35;
+  background: var(--surface-3);
+  color: var(--ink-3);
+  opacity: 1;
   cursor: not-allowed;
 }
 
@@ -1996,7 +1998,7 @@ dt {
 
 .schedule-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto 104px 34px minmax(0, auto);
+  grid-template-columns: 28px minmax(0, 1fr) 88px 104px 34px 120px;
   align-items: center;
   gap: 10px;
   padding: 11px 18px;

@@ -63,10 +63,11 @@ export function nextRunLabel(
   const jitter = hashJitter(accountId, jitterSeconds);
   const targetMinutes = Math.min(base + Math.floor(jitter / 60), 23 * 60 + 59);
   const time = formatClock(targetMinutes);
-  const today = targetMinutes > nowMinutes;
+  const isToday = targetMinutes > nowMinutes;
+  const date = isToday ? now.date : localDate(timezone, new Date(Date.now() + 86_400_000));
   return {
-    label: `${today ? '今天' : '明天'} ${time}`,
-    date: now.date,
+    label: `${isToday ? '今天' : '明天'} ${time}`,
+    date,
     time,
   };
 }
