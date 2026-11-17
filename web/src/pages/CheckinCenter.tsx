@@ -298,7 +298,6 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
                                     {isWorking ? '签到中…' : account.today ? '今日已签' : '签到'}
                                   </button>
                                 )}
-                                {!account.provider.checkIn && <span className="muted small">待适配</span>}
                               </span>
                             </div>
                           );
