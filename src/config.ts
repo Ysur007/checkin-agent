@@ -15,9 +15,6 @@ const schema = z.object({
   TZ: z.string().default('Asia/Shanghai'),
   LOG_LEVEL: z.string().default('info'),
   COOKIE_SECURE: bool,
-  BROWSER_LOGIN: z.string().optional().default('1'),
-  LOGIN_ALLOW_PRIVATE: bool,
-  PLAYWRIGHT_CHROMIUM_PATH: z.string().optional(),
   EGRESS_PROBE: z.string().optional().default('1'),
   /** 首次初始化时把自动化设为暂停，用于"装好后先观察"的部署方式。 */
   AUTOMATION_PAUSED: bool,
@@ -30,7 +27,7 @@ const dataDir = path.resolve(raw.DATA_DIR);
 fs.mkdirSync(dataDir, { recursive: true });
 
 export const config = {
-  version: '0.2.2',
+  version: '0.2.3',
   port: raw.PORT,
   dataDir,
   dbPath: path.join(dataDir, 'checkin.db'),
@@ -43,11 +40,6 @@ export const config = {
   pluginDir: path.resolve(process.cwd(), 'plugins'),
   dataPluginDir: path.join(dataDir, 'plugins'),
   sessionDays: 30,
-  browserLogin: raw.BROWSER_LOGIN !== '0',
-  loginAllowPrivate: raw.LOGIN_ALLOW_PRIVATE,
-  chromiumPath: raw.PLAYWRIGHT_CHROMIUM_PATH || '',
-  loginSessionMinutes: 12,
-  profileDir: path.join(dataDir, 'profiles'),
   egressProbe: raw.EGRESS_PROBE !== '0',
   automationPaused: raw.AUTOMATION_PAUSED,
   egressProbeUrl: raw.EGRESS_PROBE_URL,

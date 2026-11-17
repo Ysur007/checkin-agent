@@ -1,7 +1,7 @@
 # 从 GHCR 拉取预构建镜像的部署方式（NAS 上无需构建）。
 services:
   checkin-agent:
-    image: ghcr.io/ysur007/checkin-agent-app:0.2.2
+    image: ghcr.io/ysur007/checkin-agent-app:0.2.3
     container_name: checkin-agent
     restart: unless-stopped
     ports:
@@ -10,10 +10,8 @@ services:
       - ./data:/data
     environment:
       TZ: Asia/Shanghai
-      BROWSER_LOGIN: "1"
-      PLAYWRIGHT_CHROMIUM_PATH: /usr/bin/chromium
       COOKIE_SECURE: "0"
       AUTOMATION_PAUSED: "1"
-    mem_limit: 1280m
+    mem_limit: 512m
     security_opt:
       - no-new-privileges:true

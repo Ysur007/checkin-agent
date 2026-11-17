@@ -32,12 +32,11 @@ plugins/breezeblue/
 
 改完 adapter 后建议先在该平台开启金丝雀：只让一个账号执行，连续 2 天成功再放开。灰度状态存在 `platform_rollout`，可用 `POST /api/risk/canary` 控制。
 
-新增平台的两条路径：
+新增平台的唯一路径是「登录 + 签到」：先在 `plugins/<id>/` 放 `manifest.json` 与 `adapter.json`，再在 `catalog.ts` 登记同一个 `id`，并把 `checkIn` 设为 `'adapter'`。
 
-1. **只做登录采集**：在 `catalog.ts` 增加一项，`checkIn: 'none'`；不需要 adapter。
-2. **登录 + 签到**：在 `plugins/<id>/` 放 `manifest.json` 与 `adapter.json`，并在 `catalog.ts` 指向同一个 `id`。没有 adapter 的账号在签到中心会显示「待适配」。
+顺序不能反。`catalog.ts` 只收录已经有 adapter 的平台：控制台里出现的平台都可以直接签到，不存在「能加账号但不能签」的中间状态，所以也不需要 `checkIn: 'none'` 这种占位项。目录接口 `/api/providers` 的 `adapterReady` 由运行时是否加载到插件决定，插件缺失时会显示「缺少适配器」而不是假装可用。
 
-首版只执行随镜像打包的内置插件。`/data/plugins` 下的第三方目录可以被扫描和展示，但不会加载代码、不会执行 hooks，也不提供 zip 上传或远程市场。
+首版只执行随镜像打包的内置插件。`/data/plugins` 下的第三方目录不会被扫描展示，也不会加载代码、执行 hooks，不提供 zip 上传或远程市场。
 
 ## manifest.json
 

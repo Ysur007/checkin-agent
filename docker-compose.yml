@@ -1,7 +1,7 @@
 services:
   checkin-agent:
     build: .
-    image: checkin-agent:0.2.2
+    image: checkin-agent:0.2.3
     container_name: checkin-agent
     restart: unless-stopped
     ports:
@@ -14,9 +14,6 @@ services:
       # APP_KEY: ""              # 32-byte base64; leave empty to generate /data/app.key
       # ADMIN_PASSWORD: ""       # first-run password; leave empty to set it in the console
       COOKIE_SECURE: "0"         # set to 1 when served over HTTPS
-      BROWSER_LOGIN: "1"         # set to 0 to disable the server-side login browser
-      LOGIN_ALLOW_PRIVATE: "0"   # keep 0 unless you really need to log in to an intranet page
-      PLAYWRIGHT_CHROMIUM_PATH: /usr/bin/chromium
     volumes:
       - ./data:/data
     read_only: true

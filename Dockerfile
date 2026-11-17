@@ -14,7 +14,6 @@ ENV NODE_ENV=production \
     TZ=Asia/Shanghai \
     PORT=8787 \
     DATA_DIR=/data \
-    BROWSER_LOGIN=0 \
     XDG_CACHE_HOME=/tmp/cache \
     XDG_CONFIG_HOME=/tmp/config \
     HOME=/tmp
