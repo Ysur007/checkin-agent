@@ -48,8 +48,12 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!response.ok) {
     const payload = data as { error?: { code?: string; message?: string } } | null;
+    const fallback =
+      response.status === 429
+        ? '操作太频繁，服务器限流了，等几秒再试'
+        : `请求失败（HTTP ${response.status}）`;
     throw new ApiError(
-      payload?.error?.message ?? `请求失败（HTTP ${response.status}）`,
+      payload?.error?.message ?? fallback,
       payload?.error?.code ?? 'HTTP_ERROR',
       response.status,
     );

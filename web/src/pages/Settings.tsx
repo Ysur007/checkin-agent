@@ -50,7 +50,7 @@ export function Settings({ notify }: Props) {
     } catch {
       /* 令牌列表失败不影响其它设置 */
     }
-  }, [tokens]);
+  }, []);
 
   useEffect(() => {
     void loadTokens();
