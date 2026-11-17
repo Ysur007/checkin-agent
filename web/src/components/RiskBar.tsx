@@ -150,12 +150,12 @@ export function RiskBar({ risk, busy, onPause, onReset, onAck, onCanary, onEnvAc
         </p>
       )}
 
-      {env.ip && (
+      {env.ip && (env.drift !== 'none' || env.lastError) && (
         <p className="risk-policy">
           出口 <code>{env.ip}</code>
           {env.country ? ` · ${env.country}` : ''}
           {env.org ? ` · ${env.org}` : ''}
-          {env.drift === 'minor' ? ' · 同地区 IP 变动已自动沿用' : ''}
+          {env.drift === 'minor' ? ' · 同地区 IP 变动，已自动沿用新出口' : ''}
           {envBlocked ? ' · 待你确认后恢复自动任务' : ''}
           {env.lastError ? ` · 最近探测失败：${env.lastError}` : ''}
         </p>

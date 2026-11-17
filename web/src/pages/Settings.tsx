@@ -22,6 +22,7 @@ export function Settings({ notify }: Props) {
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [passwordBusy, setPasswordBusy] = useState(false);
+  const [probing, setProbing] = useState(false);
 
   useEffect(() => {
     get<SettingsData>('/api/settings')
@@ -172,6 +173,61 @@ export function Settings({ notify }: Props) {
           浏览器配置目录位于 <code>/data/profiles</code>，与数据库一样重要：它能让多数平台在 Cookie 失效后免密恢复登录。
           备份或迁移时请连同 <code>app.key</code> 一起加密保存。
         </p>
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <div>
+            <h3>网络出口</h3>
+            <p>服务每小时探测一次出口 IP、地区与运营商；地区或运营商变化会暂停自动任务，等在这里确认。</p>
+          </div>
+          <span
+            className={`pill pill-${data.environment.blocked ? 'bad' : data.environment.drift === 'minor' ? 'warn' : 'ok'}`}
+          >
+            <i />
+            {data.environment.blocked ? '待确认' : data.environment.drift === 'minor' ? '已沿用新出口' : '稳定'}
+          </span>
+        </div>
+        <div className="settings-grid">
+          <div className="field">
+            <span className="field-label">出口 IP</span>
+            <span className="setting-value">{data.environment.ip ?? '尚未探测'}</span>
+          </div>
+          <div className="field">
+            <span className="field-label">地区 / 运营商</span>
+            <span className="setting-value">
+              {[data.environment.country, data.environment.org].filter(Boolean).join(' · ') || '未知'}
+            </span>
+          </div>
+          <div className="field">
+            <span className="field-label">最近探测</span>
+            <span className="setting-value">
+              {data.environment.checkedAt ? new Date(data.environment.checkedAt).toLocaleString('zh-CN') : '—'}
+            </span>
+          </div>
+        </div>
+        {data.environment.note && <p className="security-note">{data.environment.note}</p>}
+        {data.environment.lastError && <p className="form-error">最近探测失败：{data.environment.lastError}</p>}
+        <div className="row-actions">
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            disabled={probing}
+            onClick={() => {
+              setProbing(true);
+              void post('/api/risk/environment/refresh', {})
+                .then(() => get<SettingsData>('/api/settings'))
+                .then((settings) => {
+                  setData(settings);
+                  notify('已重新探测出口', 'success');
+                })
+                .catch((error: unknown) => notify(error instanceof Error ? error.message : '探测失败', 'error'))
+                .finally(() => setProbing(false));
+            }}
+          >
+            {probing ? '探测中…' : '立即探测'}
+          </button>
+        </div>
       </section>
 
       <section className="card">

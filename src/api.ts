@@ -1051,6 +1051,7 @@ export async function createApp(deps: AppDeps) {
     keyFingerprint: deps.keyFingerprint,
     cookieSecure: config.cookieSecure,
     envPassword: Boolean(config.adminPassword),
+    environment: getEnvironmentView(),
     risk: {
       paused: isAutomationPaused(),
       strikeLimit: 3,

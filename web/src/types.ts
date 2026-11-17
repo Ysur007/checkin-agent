@@ -249,6 +249,7 @@ export interface SettingsData {
   keyFingerprint: string;
   cookieSecure: boolean;
   envPassword: boolean;
+  environment: EnvironmentView;
   risk: {
     paused: boolean;
     strikeLimit: number;
