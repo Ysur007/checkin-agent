@@ -755,6 +755,41 @@ export function countAllRiskEventsSince(since: string, kinds?: string[]): number
   return row.count;
 }
 
+export function countAccountRiskEventsSince(accountId: string, since: string, kinds?: string[]): number {
+  if (kinds && kinds.length > 0) {
+    const placeholders = kinds.map(() => '?').join(',');
+    const row = db
+      .prepare(`SELECT COUNT(*) AS count FROM risk_events WHERE account_id = ? AND at >= ? AND kind IN (${placeholders})`)
+      .get(accountId, since, ...kinds) as { count: number };
+    return row.count;
+  }
+  const row = db
+    .prepare('SELECT COUNT(*) AS count FROM risk_events WHERE account_id = ? AND at >= ?')
+    .get(accountId, since) as { count: number };
+  return row.count;
+}
+
+export function getPolicyAck(platformId: string): string | null {
+  const row = db.prepare('SELECT acked_at FROM policy_acks WHERE platform_id = ?').get(platformId) as
+    | { acked_at: string }
+    | undefined;
+  return row?.acked_at ?? null;
+}
+
+export function setPolicyAck(platformId: string, note = '用户已核对平台条款'): void {
+  db.prepare(
+    'INSERT INTO policy_acks (platform_id, acked_at, note) VALUES (?, ?, ?) ON CONFLICT(platform_id) DO UPDATE SET acked_at = excluded.acked_at, note = excluded.note',
+  ).run(platformId, nowIso(), note);
+}
+
+export function listPolicyAcks(): Record<string, string> {
+  const rows = db.prepare('SELECT platform_id, acked_at FROM policy_acks').all() as Array<{
+    platform_id: string;
+    acked_at: string;
+  }>;
+  return Object.fromEntries(rows.map((row) => [row.platform_id, row.acked_at]));
+}
+
 export function getBreaker(platformId: string): CircuitBreakerRow | undefined {
   return db.prepare('SELECT * FROM circuit_breakers WHERE platform_id = ?').get(platformId) as
     | CircuitBreakerRow

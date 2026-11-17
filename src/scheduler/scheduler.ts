@@ -2,6 +2,7 @@ import {
   countActiveLocks,
   countRunsStartedSince,
   getClaimDay,
+  getPolicyAck,
   getSchedule,
   hasScheduledRunOn,
   hasSuccessOn,
@@ -9,7 +10,7 @@ import {
   listAccounts,
   platformHasActiveLock,
 } from '../db/repo.js';
-import { isCookieExpired } from '../accounts/health.js';
+import { accountHealth, isCookieExpired } from '../accounts/health.js';
 import { getAutomationPolicy } from '../providers/policy.js';
 import { checkPlatform } from '../risk/breaker.js';
 import { hashJitter, localParts, minutesOfDay } from '../lib/time.js';
@@ -40,7 +41,10 @@ export async function tick(runner: ClaimRunner, now = new Date()): Promise<void>
       if (getClaimDay(account.id, parts.date)) return false;
       if (hasScheduledRunOn(account.id, parts.date)) return false;
       if (isCookieExpired(account)) return false;
-      if (getAutomationPolicy(account.plugin_id).automation === 'prohibited') return false;
+      const policy = getAutomationPolicy(account.plugin_id);
+      if (policy.automation === 'prohibited') return false;
+      if (policy.automation === 'unknown' && !getPolicyAck(account.plugin_id)) return false;
+      if (accountHealth(account).score < 60) return false;
       return true;
     })
     .map((account) => {

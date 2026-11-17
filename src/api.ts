@@ -23,6 +23,7 @@ import {
   getClaimDay,
   getLoginSession,
   getPluginRow,
+  getPolicyAck,
   getRun,
   getRunEvents,
   getSchedule,
@@ -37,6 +38,7 @@ import {
   runForDate,
   setAccountConfig,
   setPluginEnabled,
+  setPolicyAck,
   setSchedule,
   statsSince,
   updateAccountCookie,
@@ -69,7 +71,7 @@ import type { ClaimRunner } from './runner/claimRunner.js';
 import { CUSTOM_PROVIDER_ID, PROVIDERS, getProvider, isKnownProvider } from './providers/catalog.js';
 import { getAutomationPolicy } from './providers/policy.js';
 import { checkPlatform, getRiskOverview, recentRiskEvents, resetAllBreakers, resetBreaker } from './risk/breaker.js';
-import { isCookieExpired, verifyAccount } from './accounts/health.js';
+import { accountHealth, isCookieExpired, verifyAccount } from './accounts/health.js';
 import type { LoginSessionManager } from './login/manager.js';
 import { safeDisplayUrl } from './login/url.js';
 
@@ -175,6 +177,7 @@ function sanitizeAccount(account: AccountRow, today?: string) {
     summaryAt: account.last_summary_at,
     createdAt: account.created_at,
     updatedAt: account.updated_at,
+    health: accountHealth(account),
     canCheckIn:
       provider.checkIn && hasCookie && Boolean(account.enabled) && !claim && !expired && account.status !== 'needs_reauth',
     today: claim
@@ -870,6 +873,8 @@ export async function createApp(deps: AppDeps) {
           'CIRCUIT_BUSY',
           'AUTOMATION_PAUSED',
           'POLICY_BLOCKED',
+          'POLICY_UNACKNOWLEDGED',
+          'SESSION_UNHEALTHY',
         ].includes(result.error);
         return reply
           .code(conflict ? 409 : 500)
@@ -908,8 +913,22 @@ export async function createApp(deps: AppDeps) {
           skipped.push({ accountId: account.id, label: account.label, reason: '签到待适配' });
           continue;
         }
-        if (getAutomationPolicy(account.plugin_id).automation === 'prohibited') {
+        const policy = getAutomationPolicy(account.plugin_id);
+        if (policy.automation === 'prohibited') {
           skipped.push({ accountId: account.id, label: account.label, reason: '平台策略禁止自动化' });
+          continue;
+        }
+        if (policy.automation === 'unknown' && !getPolicyAck(account.plugin_id)) {
+          skipped.push({ accountId: account.id, label: account.label, reason: '平台条款未确认' });
+          continue;
+        }
+        const health = accountHealth(account);
+        if (health.score < 60) {
+          skipped.push({
+            accountId: account.id,
+            label: account.label,
+            reason: `会话健康分 ${health.score}（${health.label}）`,
+          });
           continue;
         }
         if (!gates.has(account.plugin_id)) gates.set(account.plugin_id, checkPlatform(account.plugin_id));
@@ -1120,6 +1139,17 @@ export async function createApp(deps: AppDeps) {
       resetAllBreakers();
       audit('admin', 'risk.reset', null);
     }
+    return getRiskOverview();
+  });
+
+  app.post('/api/risk/ack', async (request, reply) => {
+    const body = request.body as { platformId?: string } | undefined;
+    const platformId = String(body?.platformId ?? '').trim();
+    if (!platformId || (!isKnownProvider(platformId) && !getLoadedPlugin(platformId))) {
+      return reply.code(404).send({ error: { code: 'PLATFORM_NOT_FOUND', message: '未知的平台' } });
+    }
+    setPolicyAck(platformId, '用户在控制台确认已核对平台条款');
+    audit('admin', 'risk.policy.ack', platformId);
     return getRiskOverview();
   });
 

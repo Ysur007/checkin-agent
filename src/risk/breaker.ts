@@ -3,6 +3,7 @@ import {
   countPlatformRunsSince,
   countRiskEventsSince,
   getBreaker,
+  getPolicyAck,
   isAutomationPaused,
   listAccounts,
   listBreakers,
@@ -223,14 +224,20 @@ export interface RiskPlatformView {
   runs24h: number;
   challenges24h: number;
   challengeRate: number;
+  accountCount: number;
   policy: ReturnType<typeof getAutomationPolicy>;
+  policyAcknowledged: boolean;
 }
 
 export function getRiskOverview(now = Date.now()) {
   const since = new Date(now - RISK_WINDOW_MS).toISOString();
   const ids = new Set<string>();
+  const counts = new Map<string, number>();
   for (const plugin of listLoadedPlugins()) ids.add(plugin.id);
-  for (const account of listAccounts()) ids.add(account.plugin_id);
+  for (const account of listAccounts()) {
+    ids.add(account.plugin_id);
+    counts.set(account.plugin_id, (counts.get(account.plugin_id) ?? 0) + 1);
+  }
 
   const platforms: RiskPlatformView[] = [];
   let totalRuns = 0;
@@ -255,7 +262,9 @@ export function getRiskOverview(now = Date.now()) {
       runs24h: runs,
       challenges24h: challenges,
       challengeRate: runs > 0 ? Math.min(100, Math.round((challenges / runs) * 100)) : 0,
+      accountCount: counts.get(platformId) ?? 0,
       policy: getAutomationPolicy(platformId),
+      policyAcknowledged: Boolean(getPolicyAck(platformId)),
     });
   }
 

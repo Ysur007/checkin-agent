@@ -94,4 +94,10 @@ describe('platform circuit breaker', () => {
     repo.setAutomationPaused(false);
     expect(repo.isAutomationPaused()).toBe(false);
   });
+
+  it('stores a one-time policy acknowledgement per platform', () => {
+    expect(repo.getPolicyAck('breezeblue')).toBeNull();
+    repo.setPolicyAck('breezeblue', 'test');
+    expect(repo.getPolicyAck('breezeblue')).not.toBeNull();
+  });
 });

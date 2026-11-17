@@ -194,7 +194,18 @@ CREATE TABLE IF NOT EXISTS circuit_breakers (
 );
 `;
 
-export const MIGRATION_VERSION = 3;
+/**
+ * v4：平台条款确认。unknown 策略在执行前需要用户显式确认一次。
+ */
+export const MIGRATION_4_SQL = `
+CREATE TABLE IF NOT EXISTS policy_acks (
+  platform_id TEXT PRIMARY KEY,
+  acked_at TEXT NOT NULL,
+  note TEXT
+);
+`;
+
+export const MIGRATION_VERSION = 4;
 
 /** 旧库升级时需要补的列；新库已包含在 MIGRATION_SQL 里。 */
 export const ACCOUNT_COLUMNS_V2: Array<{ name: string; ddl: string }> = [

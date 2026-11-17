@@ -5,6 +5,7 @@ import {
   countRunsOn,
   getAccount,
   getClaimDay,
+  getPolicyAck,
   getRunByIdem,
   isAutomationPaused,
   platformHasActiveLock,
@@ -23,6 +24,7 @@ import { getLoadedPlugin } from '../plugins/loader.js';
 import { getProvider } from '../providers/catalog.js';
 import { getAutomationPolicy } from '../providers/policy.js';
 import { checkPlatform, recordOutcome } from '../risk/breaker.js';
+import { accountHealth } from '../accounts/health.js';
 import { open } from '../crypto/seal.js';
 import { errorMessage, redactDetail } from '../crypto/redact.js';
 import { localDate } from '../lib/time.js';
@@ -60,13 +62,26 @@ export class ClaimRunner {
       };
     }
 
+    if (isAutomationPaused()) {
+      return { error: 'AUTOMATION_PAUSED', message: '自动化已暂停，请在风险面板恢复后再执行' };
+    }
+
     const policy = getAutomationPolicy(account.plugin_id);
     if (policy.automation === 'prohibited') {
       return { error: 'POLICY_BLOCKED', message: '该平台的自动化策略标记为禁止，已阻止签到' };
     }
-    if (isAutomationPaused()) {
-      return { error: 'AUTOMATION_PAUSED', message: '自动化已暂停，请在风险面板恢复后再执行' };
+    if (policy.automation === 'unknown' && !getPolicyAck(plugin.id)) {
+      return { error: 'POLICY_UNACKNOWLEDGED', message: '请先在风险面板核对并确认该平台的自动化条款' };
     }
+
+    const health = accountHealth(account);
+    if (health.score < 40) {
+      return {
+        error: 'SESSION_UNHEALTHY',
+        message: `会话健康分 ${health.score}（${health.label}）：${health.reasons[0] ?? '请先重新登录或检测登录态'}`,
+      };
+    }
+
     const gate = checkPlatform(plugin.id);
     if (gate.blocked) {
       return {

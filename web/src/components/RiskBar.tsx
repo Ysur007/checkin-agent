@@ -6,18 +6,27 @@ interface Props {
   busy: boolean;
   onPause: (paused: boolean) => void;
   onReset: (platformId?: string) => void;
+  onAck: (platformId: string) => void;
   onEvents: () => void;
 }
 
-export function RiskBar({ risk, busy, onPause, onReset, onEvents }: Props) {
+export function RiskBar({ risk, busy, onPause, onReset, onAck, onEvents }: Props) {
   const blocked = risk.platforms.filter((platform) => platform.blocked);
   const halfOpen = risk.platforms.filter((platform) => platform.state === 'half_open');
-  const policyNote = risk.platforms.find(
-    (platform) => platform.policy.automation === 'unknown' && platform.policy.note && platform.runs24h > 0,
+  const policyPending = risk.platforms.find(
+    (platform) =>
+      platform.policy.automation === 'unknown' &&
+      !platform.policyAcknowledged &&
+      (platform.accountCount > 0 || platform.runs24h > 0),
   );
 
   const historical = !risk.paused && blocked.length === 0 && halfOpen.length === 0 && risk.totals.challenges24h > 0;
-  const tone = risk.paused || blocked.length > 0 ? 'bad' : halfOpen.length > 0 || risk.totals.challenges24h > 0 ? 'warn' : 'ok';
+  const tone =
+    risk.paused || blocked.length > 0
+      ? 'bad'
+      : halfOpen.length > 0 || risk.totals.challenges24h > 0 || policyPending
+        ? 'warn'
+        : 'ok';
 
   const title = risk.paused
     ? '自动化已暂停'
@@ -25,9 +34,11 @@ export function RiskBar({ risk, busy, onPause, onReset, onEvents }: Props) {
       ? `${blocked.map((platform) => platform.name).join('、')} 已熔断`
       : halfOpen.length > 0
         ? `${halfOpen.map((platform) => platform.name).join('、')} 处于半开验证`
-        : historical
-          ? '已恢复，观察中'
-          : '风险控制正常';
+        : policyPending
+          ? '需要确认平台条款'
+          : historical
+            ? '已恢复，观察中'
+            : '风险控制正常';
 
   const description = risk.paused
     ? '定时与手动签到都会被拦截；登录、Cookie 更新和记录查看不受影响。'
@@ -35,11 +46,13 @@ export function RiskBar({ risk, busy, onPause, onReset, onEvents }: Props) {
       ? `${blocked[0].reason ?? '连续出现验证挑战'}。到期后自动进入半开验证，只允许一次执行。`
       : halfOpen.length > 0
         ? '只允许一次真实执行；成功会自动恢复，再次遇到挑战会重新熔断。'
-        : historical
-          ? `近 24 小时仍有 ${risk.totals.challenges24h} 次挑战记录；已手动恢复，下一次执行按正常频率，再次触发会重新熔断。`
-          : risk.totals.runs24h === 0
-            ? '还没有自动执行记录；挑战、限流和熔断会记录在这里。'
-            : '挑战率低于阈值；执行保持串行、随机窗口，并受每小时启动上限约束。';
+        : policyPending
+          ? `${policyPending.name} 的自动化条款尚未确认；确认后才会执行签到。`
+          : historical
+            ? `近 24 小时仍有 ${risk.totals.challenges24h} 次挑战记录；已手动恢复，下一次执行按正常频率，再次触发会重新熔断。`
+            : risk.totals.runs24h === 0
+              ? '还没有自动执行记录；挑战、限流和熔断会记录在这里。'
+              : '挑战率低于阈值；执行保持串行、随机窗口，并受每小时启动上限约束。';
 
   return (
     <section className={`risk-bar is-${tone}`} aria-label="风险控制状态">
@@ -84,14 +97,17 @@ export function RiskBar({ risk, busy, onPause, onReset, onEvents }: Props) {
         </button>
       </div>
 
-      {policyNote && (
+      {policyPending && (
         <p className="risk-policy">
-          {policyNote.name}：{policyNote.policy.automation === 'unknown' ? '自动化条款待确认' : policyNote.policy.note}
-          {policyNote.policy.termsUrl && (
-            <a href={policyNote.policy.termsUrl} target="_blank" rel="noreferrer">
+          {policyPending.name}：自动化条款待确认，确认前不会执行签到。
+          {policyPending.policy.termsUrl && (
+            <a href={policyPending.policy.termsUrl} target="_blank" rel="noreferrer">
               查看条款 <IconExternal size={10} />
             </a>
           )}
+          <button type="button" className="link-btn" onClick={() => onAck(policyPending.platformId)} disabled={busy}>
+            我已核对条款
+          </button>
         </p>
       )}
     </section>

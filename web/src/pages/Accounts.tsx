@@ -84,6 +84,8 @@ export function Accounts({ accounts, onAdd, onRelogin, onCookie, notify, onRefre
           {accounts.map((account) => {
             const broken = account.cookie.expired || account.status === 'needs_reauth';
             const working = busy === account.id;
+            const healthTone =
+              account.health.score >= 80 ? 'ok' : account.health.score >= 40 ? 'warn' : 'bad';
             return (
               <article className={`account-card ${account.enabled ? '' : 'is-off'}`} key={account.id}>
                 <header className="account-card-head">
@@ -108,12 +110,17 @@ export function Accounts({ accounts, onAdd, onRelogin, onCookie, notify, onRefre
                     </dd>
                   </div>
                   <div>
-                    <dt>更新</dt>
-                    <dd>{timeAgo(account.cookie.updatedAt)}</dd>
+                    <dt>健康度</dt>
+                    <dd className={`health-${healthTone}`} title={account.health.reasons.join('；') || '状态正常'}>
+                      {account.health.score} · {account.health.label}
+                    </dd>
                   </div>
                   <div>
-                    <dt>过期</dt>
-                    <dd>{account.cookie.expiresAt ? formatDateTime(account.cookie.expiresAt) : '会话级'}</dd>
+                    <dt>会话有效期</dt>
+                    <dd>
+                      {account.cookie.expiresAt ? formatDateTime(account.cookie.expiresAt) : '会话级'}
+                      <span className="muted"> · {timeAgo(account.cookie.updatedAt)}更新</span>
+                    </dd>
                   </div>
                   <div>
                     <dt>签到</dt>

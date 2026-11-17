@@ -2593,6 +2593,18 @@ dt {
   margin-bottom: 2px;
 }
 
+.account-facts dd.health-ok {
+  color: var(--ok);
+}
+
+.account-facts dd.health-warn {
+  color: var(--warn);
+}
+
+.account-facts dd.health-bad {
+  color: var(--bad);
+}
+
 .account-facts dd {
   margin: 0;
   font-size: 10.5px;

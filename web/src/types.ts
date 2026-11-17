@@ -45,6 +45,13 @@ export interface AccountToday {
   httpStatus: number | null;
 }
 
+export interface HealthScore {
+  score: number;
+  level: 'healthy' | 'watch' | 'at_risk' | 'invalid';
+  label: string;
+  reasons: string[];
+}
+
 export interface AccountDto {
   id: string;
   label: string;
@@ -68,6 +75,7 @@ export interface AccountDto {
   summaryAt: string | null;
   createdAt: string;
   updatedAt: string;
+  health: HealthScore;
   canCheckIn: boolean;
   today: AccountToday | null;
 }
@@ -277,7 +285,9 @@ export interface RiskPlatform {
   runs24h: number;
   challenges24h: number;
   challengeRate: number;
+  accountCount: number;
   policy: AutomationPolicy;
+  policyAcknowledged: boolean;
 }
 
 export interface RiskOverview {

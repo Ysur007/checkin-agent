@@ -1,4 +1,10 @@
-import { getAccount, listAccounts, setAccountStatus, updateAccountSummary } from '../db/repo.js';
+import {
+  countAccountRiskEventsSince,
+  getAccount,
+  listAccounts,
+  setAccountStatus,
+  updateAccountSummary,
+} from '../db/repo.js';
 import { getLoadedPlugin } from '../plugins/loader.js';
 import { requestWithRetry } from '../runner/http.js';
 import { extractFields } from '../plugins/jsonpath.js';
@@ -8,6 +14,7 @@ import { errorMessage } from '../crypto/redact.js';
 import { logger } from '../logger.js';
 import type { AccountRow } from '../types.js';
 import { markCookieChecked } from '../db/repo.js';
+import { scoreAccountHealth, type HealthScore } from './healthScore.js';
 
 export interface HealthResult {
   ok: boolean;
@@ -24,6 +31,27 @@ export interface HealthResult {
 }
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
+const DAY = 24 * 60 * 60 * 1000;
+
+/** 账号健康分：本地状态 + 近 24 小时挑战次数，用于调度降速与界面展示。 */
+export function accountHealth(account: AccountRow, now = Date.now()): HealthScore {
+  const challenges = countAccountRiskEventsSince(account.id, new Date(now - DAY).toISOString(), [
+    'challenge',
+    'rate_limited',
+  ]);
+  return scoreAccountHealth({
+    hasCookie: Boolean(account.cookie_sealed),
+    expired: isCookieExpired(account, now),
+    status: account.status,
+    verifiable: Boolean(getLoadedPlugin(account.plugin_id)),
+    verified: account.cookie_verified === 1,
+    checkedAt: account.cookie_checked_at,
+    failStreak: account.fail_streak,
+    lastOkAt: account.last_ok_at,
+    challenges24h: challenges,
+    now,
+  });
+}
 
 /** 本地就能判断的过期检查（不消耗平台请求）。 */
 export function isCookieExpired(account: AccountRow, now = Date.now()): boolean {

@@ -168,6 +168,20 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
     }
   };
 
+  const ackPolicy = async (platformId: string) => {
+    setRiskBusy(true);
+    try {
+      await post('/api/risk/ack', { platformId });
+      notify('已记录条款确认；该平台可以执行签到了', 'success');
+      await loadRisk();
+      await onRefresh();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '确认失败', 'error');
+    } finally {
+      setRiskBusy(false);
+    }
+  };
+
   const resetPlatform = async (platformId?: string) => {
     setRiskBusy(true);
     try {
@@ -216,6 +230,7 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
           busy={riskBusy}
           onPause={(paused) => void togglePause(paused)}
           onReset={(platformId) => void resetPlatform(platformId)}
+          onAck={(platformId) => void ackPolicy(platformId)}
           onEvents={() => setRiskEventsOpen(true)}
         />
       )}
@@ -324,6 +339,7 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
                                   {account.authSource === 'browser' ? '浏览器登录' : '手动 Cookie'}
                                   {account.cookie.updatedAt ? ` · ${timeAgo(account.cookie.updatedAt)}更新` : ''}
                                   {account.balance !== null ? ` · 余额 ${formatNumber(account.balance)}` : ''}
+                                  {account.cookie.configured ? ` · 健康 ${account.health.score}` : ''}
                                 </span>
                               </span>
                               <span className={`pill pill-${accountInfo.tone}`}>

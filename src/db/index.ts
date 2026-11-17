@@ -4,6 +4,7 @@ import {
   ACCOUNT_COLUMNS_V2,
   MIGRATION_2_SQL,
   MIGRATION_3_SQL,
+  MIGRATION_4_SQL,
   MIGRATION_SQL,
   MIGRATION_VERSION,
 } from './migrations.js';
@@ -45,6 +46,10 @@ export function migrate(): void {
     if (current < 3) {
       db.exec(MIGRATION_3_SQL);
       markVersion(3, 'risk-events-and-circuit-breakers');
+    }
+    if (current < 4) {
+      db.exec(MIGRATION_4_SQL);
+      markVersion(4, 'policy-acknowledgements');
     }
   });
 
