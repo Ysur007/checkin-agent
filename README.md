@@ -135,6 +135,27 @@ docker compose up -d --build
 
 首次启动如果出现 `SQLITE_CANTOPEN` / `permission denied`，在宿主机执行 `sudo chown -R 1000:1000 ./data`（容器内是 node 用户，UID 1000）。
 
+### 用 GitHub Actions 构建的镜像（推荐，设备上不用装构建环境）
+
+`.github/workflows/docker-image.yml` 会在 push 时构建并推送到 GHCR：
+
+```bash
+docker pull ghcr.io/ysur007/checkin-agent-app:0.2.0
+docker run -d --name checkin-agent --restart unless-stopped \
+  -p 8787:8787 \
+  -v /vol1/1000/docker/checkin-agent/data:/data \
+  -e TZ=Asia/Shanghai \
+  -e BROWSER_LOGIN=1 \
+  -e PLAYWRIGHT_CHROMIUM_PATH=/usr/bin/chromium \
+  -e AUTOMATION_PAUSED=1 \
+  -m 1280m \
+  ghcr.io/ysur007/checkin-agent-app:0.2.0
+```
+
+`AUTOMATION_PAUSED=1` 只在**首次初始化**时生效：装好即为暂停状态，之后以控制台开关为准，重启不会覆盖你的选择。适合"先部署观察、确认链路后再放开"的场景。
+
+`deploy/compose.yaml` 是设备本地构建版，`deploy/compose.pull.yaml` 是拉取 GHCR 镜像版，两者都带这个开关。
+
 ## 本地开发
 
 ```bash
