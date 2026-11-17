@@ -134,8 +134,8 @@ export default function App() {
         ? '未添加账号'
         : '无适配账号'
       : done >= total
-        ? '今日已执行'
-        : `待签到 ${total - done}`;
+        ? `已签 ${done}/${total}`
+        : `待签 ${total - done}`;
   const todayTone: 'ok' | 'warn' | 'muted' = total === 0 ? 'muted' : done >= total ? 'ok' : 'warn';
 
   return (

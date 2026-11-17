@@ -772,6 +772,7 @@ export async function createApp(deps: AppDeps) {
     const accounts = listAccounts().map((account) => sanitizeAccount(account, today));
     const eligible = accounts.filter((account) => account.provider.checkIn && account.cookie.configured && account.enabled);
     const checked = eligible.filter((account) => account.today);
+    const loggedIn = accounts.filter((account) => account.cookie.configured);
     const credits30 = claimDaysSince(addDaysToKey(29)).reduce((sum, row) => sum + row.credits, 0);
 
     return {
@@ -781,8 +782,8 @@ export async function createApp(deps: AppDeps) {
       stats: {
         progressDone: checked.length,
         progressTotal: eligible.length,
-        scheduledEnabled: eligible.length,
-        scheduledTotal: eligible.length,
+        scheduledEnabled: loggedIn.filter((account) => account.enabled).length,
+        scheduledTotal: loggedIn.length,
         attention: accounts.filter(
           (account) => account.cookie.configured && (account.status === 'needs_reauth' || account.status === 'error'),
         ).length,

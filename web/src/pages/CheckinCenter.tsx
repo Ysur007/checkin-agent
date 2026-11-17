@@ -74,7 +74,12 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
       if (existing) existing.accounts.push(account);
       else map.set(account.provider.id, { provider: account.provider, accounts: [account] });
     }
-    return [...map.values()].sort((a, b) => b.accounts.length - a.accounts.length || a.provider.name.localeCompare(b.provider.name));
+    return [...map.values()].sort(
+      (a, b) =>
+        Number(b.provider.checkIn) - Number(a.provider.checkIn) ||
+        b.accounts.length - a.accounts.length ||
+        a.provider.name.localeCompare(b.provider.name),
+    );
   }, [data]);
 
   const toggle = (id: string) => {
@@ -353,7 +358,7 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
                 <div className="record-line" key={`${item.accountId}-${item.runId ?? item.at}`}>
                   <ProviderIcon provider={item.provider} size={22} />
                   <span className="record-name">{item.label}</span>
-                  <span className="muted small">{item.provider.name}</span>
+                  {item.provider.name !== item.label && <span className="muted small">{item.provider.name}</span>}
                   <span className={`pill pill-${item.verified ? 'ok' : 'warn'}`}>
                     <i />
                     {item.verified ? '已复核' : '未复核'}
@@ -450,17 +455,19 @@ function ScheduleRow({
       <button type="button" className={`toggle ${account.enabled ? 'is-on' : ''}`} onClick={() => void toggle()} disabled={busy} aria-pressed={account.enabled} aria-label={account.enabled ? '暂停定时签到' : '恢复定时签到'}>
         <span />
       </button>
-      {(account.cookie.expired || account.status === 'needs_reauth') && (
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => onRelogin(account)}>
-          重新登录
-        </button>
-      )}
-      {account.today && (
-        <span className="pill pill-ok">
-          <i />
-          <IconCheck size={11} /> 今日已签
-        </span>
-      )}
+      <span className="schedule-tail">
+        {(account.cookie.expired || account.status === 'needs_reauth') && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onRelogin(account)}>
+            重新登录
+          </button>
+        )}
+        {account.today && (
+          <span className="pill pill-ok">
+            <i />
+            <IconCheck size={11} /> 今日已签
+          </span>
+        )}
+      </span>
     </div>
   );
 }
