@@ -770,7 +770,57 @@ export async function createApp(deps: AppDeps) {
           updatedAt: account.cookie_updated_at,
         };
       }),
+      // 扩展需要知道「当前站点属于哪个平台」，才能在必要时新建账号而不是覆盖已有账号。
+      providers: PROVIDERS.filter((provider) => Boolean(provider.adapterId && getLoadedPlugin(provider.adapterId))).map(
+        (provider) => ({
+          id: provider.id,
+          name: provider.name,
+          loginUrl: provider.loginUrl,
+          cookieDomains: provider.cookieDomains,
+          primaryCookie: provider.primaryCookie,
+        }),
+      ),
     };
+  });
+
+  // 扩展用同一个 Bearer 令牌新建账号：同一平台可以并存多个账号（主号 / 小号 / 另一台浏览器）。
+  app.post('/api/ext/accounts', async (request, reply) => {
+    if (!readExtToken(request)) {
+      return reply.code(401).send({ error: { code: 'EXT_TOKEN_INVALID', message: '扩展令牌无效或已吊销' } });
+    }
+    const body = request.body as { providerId?: string; label?: string; loginUrl?: string };
+    const providerId = String(body?.providerId ?? '').trim();
+    const provider = getProvider(providerId);
+    if (!provider) {
+      return reply.code(400).send({ error: { code: 'PROVIDER_INVALID', message: '这个平台不在目录里' } });
+    }
+    if (!provider.adapterId || !getLoadedPlugin(provider.adapterId)) {
+      return reply.code(409).send({ error: { code: 'ADAPTER_MISSING', message: '这个平台缺少签到适配器' } });
+    }
+    const label = String(body?.label ?? '').trim().slice(0, 40) || provider.name;
+    const rawUrl = String(body?.loginUrl ?? '').trim() || provider.loginUrl || '';
+    if (!rawUrl) {
+      return reply.code(400).send({ error: { code: 'LOGIN_URL_REQUIRED', message: '请填写这个平台的登录页地址' } });
+    }
+    const account = createAccount({
+      pluginId: provider.id,
+      label,
+      loginUrl: normalizeUrl(rawUrl),
+      authSource: 'extension',
+    });
+    audit('extension', 'account.create', account.id, { providerId: provider.id, label });
+    return reply.code(201).send({
+      account: {
+        id: account.id,
+        label: account.label,
+        providerId: account.plugin_id,
+        providerName: provider.name,
+        loginUrl: account.login_url,
+        configured: false,
+        verified: false,
+        updatedAt: null,
+      },
+    });
   });
 
   app.post('/api/ext/cookie', async (request, reply) => {

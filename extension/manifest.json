@@ -1,10 +1,17 @@
 {
   "manifest_version": 3,
   "name": "签到执行台 · 登录助手",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "把当前站点的登录 Cookie 加密回传到你自己部署的签到执行台，不需要手动复制。",
-  "permissions": ["cookies", "storage", "tabs"],
-  "host_permissions": ["http://*/*", "https://*/*"],
+  "permissions": [
+    "cookies",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "保存登录到签到执行台"

@@ -1,7 +1,7 @@
 services:
   checkin-agent:
     build: .
-    image: checkin-agent:0.2.3
+    image: checkin-agent:0.2.4
     container_name: checkin-agent
     restart: unless-stopped
     ports:

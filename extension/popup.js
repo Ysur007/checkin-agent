@@ -1,7 +1,10 @@
 const el = (id) => document.getElementById(id);
 
+const NEW_ACCOUNT = '__new__';
+
 let config = { host: '', token: '' };
 let accounts = [];
+let providers = [];
 let activeTab = null;
 
 function setStatus(text, tone) {
@@ -52,33 +55,99 @@ function hostOf(url) {
   }
 }
 
+function hostMatches(hostname, target) {
+  const host = hostOf(target || '') || String(target || '').replace(/^\./, '').toLowerCase();
+  if (!hostname || !host) return false;
+  return hostname === host || hostname.endsWith(`.${host}`);
+}
+
 function matches(account, hostname) {
   if (!account.loginUrl) return false;
-  const target = hostOf(account.loginUrl);
-  if (!target) return false;
-  return hostname === target || hostname.endsWith(`.${target}`);
+  return hostMatches(hostname, account.loginUrl);
+}
+
+/** 当前站点属于哪个已适配平台；找不到就返回 null。 */
+function providerForHost(hostname) {
+  if (!hostname) return null;
+  return (
+    providers.find((provider) => {
+      if (hostMatches(hostname, provider.loginUrl)) return true;
+      return (provider.cookieDomains || []).some((domain) => hostMatches(hostname, domain));
+    }) || null
+  );
+}
+
+function selectedAccount() {
+  const value = el('account').value;
+  if (!value || value === NEW_ACCOUNT) return null;
+  return accounts.find((account) => account.id === value) || null;
+}
+
+function updateHint(hostname, provider) {
+  const value = el('account').value;
+  if (value === NEW_ACCOUNT) {
+    const existing = accounts.find((account) => matches(account, hostname) && account.configured);
+    const base = provider
+      ? `会新建一个「${provider.name}」账号，已有账号的登录态不会被改动。`
+      : '会新建一个账号，已有账号的登录态不会被改动。';
+    el('hint').textContent = existing
+      ? `${base}「${existing.label}」已保存的登录态保持原样，要刷新它请在列表里手动选中。`
+      : base;
+    return;
+  }
+  const current = selectedAccount();
+  if (current) {
+    el('hint').textContent = `会覆盖「${current.label}」当前的登录态。想保留原来的登录，选「＋ 新建账号」。`;
+    return;
+  }
+  el('hint').textContent = '没有账号与当前站点匹配，请手动选择目标账号。';
 }
 
 function fillAccounts(hostname) {
   const select = el('account');
+  const provider = providerForHost(hostname);
   select.innerHTML = '';
+
+  if (provider) {
+    const option = document.createElement('option');
+    option.value = NEW_ACCOUNT;
+    option.textContent = `＋ 新建账号（${provider.name}）`;
+    select.appendChild(option);
+  }
+
   if (accounts.length === 0) {
-    select.innerHTML = '<option value="">还没有账号，请先在控制台添加</option>';
+    if (!provider) {
+      select.innerHTML = '<option value="">还没有账号，请先在控制台添加</option>';
+      return;
+    }
+    select.value = NEW_ACCOUNT;
+    updateHint(hostname, provider);
     return;
   }
+
   for (const account of accounts) {
     const option = document.createElement('option');
     option.value = account.id;
     option.textContent = `${account.label} · ${account.providerName}${account.verified ? ' · 已验证' : ''}`;
     select.appendChild(option);
   }
+
   const auto = accounts.find((account) => matches(account, hostname));
-  if (auto) {
+  // 已有可用登录态时默认「新建」：覆盖是不可逆的，刷新老账号应由用户显式选择。
+  if (auto && auto.configured && provider) {
+    select.value = NEW_ACCOUNT;
+  } else if (auto) {
     select.value = auto.id;
-    el('hint').textContent = `已按当前站点自动选中「${auto.label}」。`;
   } else {
-    el('hint').textContent = '没有账号与当前站点匹配，请手动选择目标账号。';
+    select.value = provider ? NEW_ACCOUNT : accounts[0].id;
   }
+  updateHint(hostname, provider);
+}
+
+function defaultLabel(provider) {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${provider.name} ${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`.slice(0, 40);
 }
 
 async function refreshAccounts(hostname) {
@@ -89,6 +158,7 @@ async function refreshAccounts(hostname) {
     return;
   }
   accounts = result.body.accounts || [];
+  providers = result.body.providers || [];
   clearStatus();
   fillAccounts(hostname);
 }
@@ -102,9 +172,21 @@ async function buildCookieHeader(url) {
     .join('; ');
 }
 
+async function createAccountFor(provider) {
+  const result = await api('/api/ext/accounts', {
+    method: 'POST',
+    body: JSON.stringify({ providerId: provider.id, label: defaultLabel(provider) }),
+  });
+  if (result.status !== 201) {
+    setStatus(result.body?.error?.message || `新建账号失败（HTTP ${result.status}）`, 'bad');
+    return null;
+  }
+  return result.body.account;
+}
+
 async function capture() {
-  const accountId = el('account').value;
-  if (!accountId) {
+  const choice = el('account').value;
+  if (!choice) {
     setStatus('请先选择一个账号', 'bad');
     return;
   }
@@ -117,14 +199,33 @@ async function capture() {
     return;
   }
 
+  const hostname = hostOf(activeTab.url);
+  const provider = providerForHost(hostname);
+  if (choice === NEW_ACCOUNT && !provider) {
+    setStatus('当前站点没有匹配的平台，无法新建账号。', 'bad');
+    return;
+  }
+
   el('capture').disabled = true;
-  setStatus('正在读取当前站点 Cookie…', 'busy');
+  let created = false;
+  let accountId = choice;
+
   try {
+    if (choice === NEW_ACCOUNT) {
+      setStatus('正在新建账号…', 'busy');
+      const account = await createAccountFor(provider);
+      if (!account) return;
+      accountId = account.id;
+      created = true;
+    }
+
+    setStatus('正在读取当前站点 Cookie…', 'busy');
     const header = await buildCookieHeader(activeTab.url);
     if (!header) {
       setStatus('当前站点没有可读的 Cookie，请确认已经登录。', 'bad');
       return;
     }
+
     setStatus('正在校验并加密保存…', 'busy');
     const result = await api('/api/ext/cookie', {
       method: 'POST',
@@ -134,16 +235,20 @@ async function capture() {
       setStatus(result.body?.error?.message || `保存失败（HTTP ${result.status}）`, 'bad');
       return;
     }
+
     const account = result.body.account;
     const verified = account?.cookie?.verified;
     const count = account?.cookie?.fields?.length ?? 0;
+    const target = created ? `新建账号「${account?.label}」` : `「${account?.label}」`;
     setStatus(
       verified
-        ? `已保存并验证通过：${account.label}，${count} 个字段。`
-        : `已保存，但平台校验未通过：${result.body.warning || '请稍后重试'}`,
+        ? `已${created ? '新建并' : ''}保存到${target}，${count} 个字段，校验通过。`
+        : `已保存到${target}，但平台校验未通过：${result.body.warning || '请确认这是登录后的 Cookie'}`,
       verified ? 'ok' : 'bad',
     );
-    await refreshAccounts(hostOf(activeTab.url));
+    await refreshAccounts(hostname);
+    if (created) el('account').value = accountId;
+    updateHint(hostname, provider);
   } catch (error) {
     setStatus(error instanceof Error ? error.message : String(error), 'bad');
   } finally {
@@ -185,6 +290,11 @@ el('save-config').addEventListener('click', async () => {
   await chrome.storage.local.set({ host, token });
   clearStatus();
   await boot();
+});
+
+el('account').addEventListener('change', () => {
+  const hostname = hostOf(activeTab?.url || '');
+  updateHint(hostname, providerForHost(hostname));
 });
 
 el('capture').addEventListener('click', () => void capture());

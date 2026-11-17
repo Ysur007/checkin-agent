@@ -53,7 +53,9 @@ docker compose up -d --build
 1. 控制台 → 设置 → 浏览器扩展 → 下载并解压
 2. `chrome://extensions`（Edge 是 `edge://extensions`）→ 打开开发者模式 → 加载已解压的扩展程序
 3. 在同一张卡片里点「生成扩展令牌」，把令牌和控制台地址填进扩展弹窗
-4. 登录平台后点扩展图标 →「读取当前站点 Cookie 并保存」
+4. 登录平台后点扩展图标 → 选择目标账号 →「读取当前站点 Cookie 并保存」
+
+下拉框里有两类选项：已有的账号，和「＋ 新建账号（平台名）」。选已有账号会**覆盖**它的登录态（适合原账号登录过期后刷新）；想保留原来的登录态、再存一个（主号 / 小号 / 另一台浏览器），选「＋ 新建账号」，服务端会建一条独立账号记录，互不影响。弹窗底部会明确写出这次是覆盖还是新建。
 
 扩展用 `chrome.cookies` 读取**当前标签所属站点**的 Cookie，带上 Bearer 令牌 POST 到 `/api/ext/cookie`。令牌只存 SHA-256 哈希、可随时吊销；扩展除了把 Cookie 发给你的控制台，不联网保存任何东西。
 
@@ -150,14 +152,14 @@ adapter 需要声明：主 Cookie 名、Cookie 域、summary 与 claim 的 metho
 `.github/workflows/docker-image.yml` 在 push 时构建并推送到 GHCR：
 
 ```bash
-docker pull ghcr.io/ysur007/checkin-agent-app:0.2.3
+docker pull ghcr.io/ysur007/checkin-agent-app:0.2.4
 docker run -d --name checkin-agent --restart unless-stopped \
   -p 8787:8787 \
   -v /vol1/1000/docker/checkin-agent/data:/data \
   -e TZ=Asia/Shanghai \
   -e AUTOMATION_PAUSED=1 \
   -m 512m \
-  ghcr.io/ysur007/checkin-agent-app:0.2.3
+  ghcr.io/ysur007/checkin-agent-app:0.2.4
 ```
 
 `AUTOMATION_PAUSED=1` 只在**首次初始化**时生效：装好即为暂停，之后以控制台开关为准，重启不会覆盖你的选择。适合「先部署观察、确认链路后再放开」。
