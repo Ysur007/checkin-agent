@@ -27,6 +27,7 @@ function detailText(detail: Record<string, unknown>): string {
   if (typeof detail.reason === 'string') parts.push(detail.reason);
   if (typeof detail.openUntil === 'string') parts.push(`至 ${formatDateTime(detail.openUntil)}`);
   if (typeof detail.note === 'string') parts.push(detail.note);
+  if (typeof detail.at === 'string' && !detail.note) parts.push(formatDateTime(detail.at));
   return parts.join(' · ') || '—';
 }
 
@@ -65,6 +66,12 @@ export function RiskEventsModal({ onClose }: Props) {
       )}
       {items && items.length > 0 && (
         <div className="risk-event-list">
+          <div className="risk-event-row is-head">
+            <span>类型</span>
+            <span>平台</span>
+            <span>时间</span>
+            <span>说明</span>
+          </div>
           {items.map((item) => (
             <div className="risk-event-row" key={item.id}>
               <span className={`risk-event-kind kind-${item.kind}`}>{KIND_LABEL[item.kind] ?? item.kind}</span>

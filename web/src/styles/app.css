@@ -2954,6 +2954,16 @@ dt {
   border-bottom: 1px solid var(--line);
 }
 
+.risk-event-row.is-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  font-size: 9.5px;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--line-strong);
+}
+
 .risk-event-kind {
   justify-self: start;
   padding: 1px 5px;

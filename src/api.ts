@@ -32,7 +32,6 @@ import {
   listPluginRows,
   listRuns,
   isAutomationPaused,
-  recordRiskEvent,
   setAutomationPaused,
   latestRunForAccount,
   runForDate,
@@ -1094,7 +1093,7 @@ export async function createApp(deps: AppDeps) {
         id: event.id,
         at: event.at,
         platformId: event.platform_id,
-        platform: providerMeta(event.platform_id).name,
+        platform: event.platform_id === 'system' ? '系统' : providerMeta(event.platform_id).name,
         accountId: event.account_id,
         kind: event.kind,
         detail: parseJson(event.detail),
@@ -1108,12 +1107,7 @@ export async function createApp(deps: AppDeps) {
       return reply.code(400).send({ error: { code: 'INVALID_BODY', message: '缺少 paused' } });
     }
     setAutomationPaused(body.paused);
-    recordRiskEvent({
-      platformId: 'system',
-      kind: body.paused ? 'pause' : 'resume',
-      detail: { at: new Date().toISOString() },
-    });
-    audit('admin', body.paused ? 'risk.pause' : 'risk.resume', null);
+    audit('admin', body.paused ? 'risk.pause' : 'risk.resume', null, { at: new Date().toISOString() });
     return { paused: body.paused };
   });
 
