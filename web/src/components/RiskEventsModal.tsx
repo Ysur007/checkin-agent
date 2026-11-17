@@ -42,7 +42,8 @@ function detailText(detail: Record<string, unknown>): string {
   if (typeof detail.errorCode === 'string' && detail.errorCode) parts.push(detail.errorCode);
   if (typeof detail.reason === 'string') parts.push(detail.reason);
   if (typeof detail.openUntil === 'string') parts.push(`至 ${formatDateTime(detail.openUntil)}`);
-  if (typeof detail.note === 'string') parts.push(detail.note);
+  // from/to 已表达同一件事，避免重复描述
+  if (typeof detail.note === 'string' && typeof detail.from !== 'string') parts.push(detail.note);
   if (typeof detail.at === 'string' && !detail.note) parts.push(formatDateTime(detail.at));
   return parts.join(' · ') || '—';
 }
