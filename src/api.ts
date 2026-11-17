@@ -79,12 +79,10 @@ import { checkPlatform, getRiskOverview, recentRiskEvents, resetAllBreakers, res
 import { ackEnvironment, getEnvironmentView, refreshEnvironment } from './risk/environment.js';
 import { canaryHold, getRolloutView, startCanary, stopCanary } from './risk/rollout.js';
 import { accountHealth, isCookieExpired, verifyAccount } from './accounts/health.js';
-import type { LoginSessionManager } from './login/manager.js';
 import { safeDisplayUrl } from './login/url.js';
 
 interface AppDeps {
   runner: ClaimRunner;
-  login: LoginSessionManager;
   appKey: Buffer;
   keyFingerprint: string;
 }
@@ -224,26 +222,6 @@ function sanitizeRun(run: RunRow | undefined) {
   };
 }
 
-function loginSessionDto(sessionId: string, status?: string) {
-  const row = getLoginSession(sessionId);
-  if (!row) return null;
-  return {
-    id: row.id,
-    providerId: row.provider_id,
-    provider: providerMeta(row.provider_id),
-    accountId: row.account_id,
-    label: row.label,
-    status: status ?? row.status,
-    loginUrl: safeDisplayUrl(row.login_url),
-    currentUrl: row.current_url,
-    pageTitle: row.page_title,
-    cookieNames: row.detected_cookies ? row.detected_cookies.split(',').filter(Boolean) : [],
-    error: row.last_error,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    expiresAt: row.expires_at,
-  };
-}
 
 function pluginDto(plugin: PluginRecord) {
   const row = getPluginRow(plugin.id);
@@ -277,12 +255,34 @@ function readCatalog(): Array<Record<string, unknown>> {
   }
 }
 
+/**
+ * 接受三种粘贴形式，统一成 Cookie 请求头：
+ * 1. 纯 Cookie 头：`a=1; b=2`
+ * 2. 带前缀：`Cookie: a=1; b=2`
+ * 3. 整段 cURL（DevTools 右键 Copy as cURL），从中提取 -H 'cookie: ...'
+ */
 function normalizeCookie(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
-  let value = raw.trim();
+  const text = raw.trim();
+  if (!text) return null;
+
+  let value = text;
+  const curlHeader = text.match(/(?:-H|--header)\s+['"](?:cookie|Cookie)\s*:\s*([^'"]+)['"]/);
+  if (curlHeader) {
+    value = curlHeader[1];
+  } else {
+    const cookieLine = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => /^cookie\s*:/i.test(line));
+    if (cookieLine) value = cookieLine;
+  }
+
+  value = value.replace(/\r?\n\s*/g, ' ').trim();
   if (/^cookie\s*:/i.test(value)) value = value.replace(/^cookie\s*:/i, '').trim();
+  value = value.replace(/^['"]|['"]$/g, '').trim();
+
   if (!value || value.length < 10 || value.length > 8000) return null;
-  if (/[\r\n]/.test(value)) return null;
   if (!value.includes('=')) return null;
   return value;
 }
@@ -687,240 +687,30 @@ export async function createApp(deps: AppDeps) {
     },
   );
 
-  /* ---------- login sessions ---------- */
+  /* ---------- accounts: create ---------- */
 
-  app.post(
-    '/api/login-sessions',
-    { config: { rateLimit: { max: 8, timeWindow: '5 minutes' } } },
-    async (request, reply) => {
-      const body = request.body as {
-        providerId?: string;
-        loginUrl?: string;
-        label?: string;
-        accountId?: string;
-      };
-      const providerId = String(body?.providerId ?? '');
-      const def = getProvider(providerId);
-      if (!isKnownProvider(providerId)) {
-        return reply.code(404).send({ error: { code: 'PROVIDER_NOT_FOUND', message: '未知的平台' } });
-      }
-
-      let account: AccountRow | undefined;
-      if (body?.accountId) {
-        account = getAccount(String(body.accountId));
-        if (!account) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '账号不存在' } });
-        if (account.plugin_id !== providerId) {
-          return reply.code(400).send({ error: { code: 'PROVIDER_MISMATCH', message: '账号与平台不匹配' } });
-        }
-      }
-
-      const rawUrl = String(body?.loginUrl ?? '').trim() || def?.loginUrl || account?.login_url || '';
-      if (!rawUrl) {
-        return reply.code(400).send({ error: { code: 'LOGIN_URL_REQUIRED', message: '请填写这个平台的登录页地址' } });
-      }
-      const loginUrl = normalizeUrl(rawUrl);
-      const label = (String(body?.label ?? '').trim() || account?.label || def?.name || '新账号').slice(0, 40);
-      const created = account ? null : createAccount({ pluginId: providerId, label, loginUrl, authSource: 'browser' });
-      const target = account ?? created!;
-
-      try {
-        const session = await deps.login.start({
-          providerId,
-          loginUrl,
-          label,
-          ownerSession: request.session!.id,
-          accountId: target.id,
-        });
-        if (account) setAccountConfig(account.id, { label });
-        audit('admin', 'login.start', session.id, { providerId, accountId: target.id });
-        return reply.code(201).send({ session: loginSessionDto(session.id), accountId: target.id });
-      } catch (error) {
-        if (created && !created.cookie_sealed && countRunsForAccount(created.id) === 0) deleteAccount(created.id);
-        const code = (error as { code?: string }).code ?? 'LOGIN_START_FAILED';
-        const message = error instanceof Error ? error.message : '无法打开登录窗口';
-        logger.warn({ providerId, code, message }, 'login session failed to start');
-        return reply.code((error as { httpStatus?: number }).httpStatus ?? 500).send({ error: { code, message } });
-      }
-    },
-  );
-
-  app.get('/api/login-sessions/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
-      deps.login.get(id, request.session!.id);
-      return { session: loginSessionDto(id) };
-    } catch (error) {
-      return reply.code((error as { httpStatus?: number }).httpStatus ?? 404).send({
-        error: { code: (error as { code?: string }).code ?? 'NOT_FOUND', message: (error as Error).message },
-      });
+  app.post('/api/accounts', async (request, reply) => {
+    const body = request.body as { providerId?: string; loginUrl?: string; label?: string };
+    const providerId = String(body?.providerId ?? '').trim();
+    if (!providerId || (!isKnownProvider(providerId) && providerId !== CUSTOM_PROVIDER_ID)) {
+      return reply.code(400).send({ error: { code: 'PROVIDER_INVALID', message: '请选择平台' } });
     }
-  });
-
-  app.get('/api/login-sessions/:id/frame', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    try {
-      const frame = await deps.login.frame(id, request.session!.id);
-      reply.header('cache-control', 'no-store, max-age=0').type('image/jpeg').send(frame);
-    } catch (error) {
-      const code = (error as { code?: string }).code ?? 'FRAME_FAILED';
-      return reply.code((error as { httpStatus?: number }).httpStatus ?? 502).send({
-        error: { code, message: error instanceof Error ? error.message : '无法获取画面' },
-      });
+    const provider = getProvider(providerId);
+    const label = String(body?.label ?? '').trim().slice(0, 40) || provider?.name || '新账号';
+    const rawUrl = String(body?.loginUrl ?? '').trim() || provider?.loginUrl || '';
+    if (!rawUrl) {
+      return reply.code(400).send({ error: { code: 'LOGIN_URL_REQUIRED', message: '请填写这个平台的登录页地址' } });
     }
-  });
-
-  app.post('/api/login-sessions/:id/actions', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const action = request.body as { type?: string } & Record<string, unknown>;
-    try {
-      await deps.login.act(id, request.session!.id, action as never);
-      return { ok: true };
-    } catch (error) {
-      const code = (error as { code?: string }).code ?? 'ACTION_FAILED';
-      return reply.code((error as { httpStatus?: number }).httpStatus ?? 502).send({
-        error: { code, message: error instanceof Error ? error.message : '操作失败' },
-      });
-    }
-  });
-
-  app.post('/api/login-sessions/:id/capture', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const owner = request.session!.id;
-    let session;
-    try {
-      session = deps.login.get(id, owner);
-    } catch (error) {
-      return reply.code((error as { httpStatus?: number }).httpStatus ?? 404).send({
-        error: { code: (error as { code?: string }).code ?? 'NOT_FOUND', message: (error as Error).message },
-      });
-    }
-    if (!session.account_id) {
-      return reply.code(409).send({ error: { code: 'NO_ACCOUNT', message: '登录窗口还没有绑定账号' } });
-    }
-    const account = getAccount(session.account_id);
-    if (!account) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '账号不存在' } });
-
-    let captured: Awaited<ReturnType<LoginSessionManager['capture']>>;
-    try {
-      captured = await deps.login.capture(id, owner);
-    } catch (error) {
-      const code = (error as { code?: string }).code ?? 'COOKIE_EMPTY';
-      updateLoginSession(id, { lastError: error instanceof Error ? error.message : '捕捉 Cookie 失败' });
-      return reply.code((error as { httpStatus?: number }).httpStatus ?? 409).send({
-        error: { code, message: error instanceof Error ? error.message : '还没有捕捉到 Cookie' },
-      });
-    }
-
-    const plugin = getLoadedPlugin(account.plugin_id);
-    let verified = false;
-    let warning: string | null = null;
-
-    if (plugin) {
-      const test = await requestWithRetry(plugin, 'summary', captured.header, plugin.manifest.limits.timeoutMs);
-      const code = test.error?.code as ErrorCode | undefined;
-      if (test.error && (code === 'AUTH_REQUIRED' || code === 'CHALLENGE_DETECTED')) {
-        updateLoginSession(id, { lastError: '登录态还不可用，请继续完成验证' });
-        return reply.code(422).send({
-          error: {
-            code: test.error.code,
-            message: `登录还没有完成或登录态不可用：${friendlyMessage(code, test.error.message)}`,
-          },
-        });
-      }
-      if (test.error) {
-        warning = `Cookie 已保存，但校验请求失败：${friendlyMessage(code ?? 'INTERNAL', test.error.message)}`;
-      } else if (test.result) {
-        const extracted = extractFields(test.result.json, plugin.adapter.extract.summary);
-        if (typeof extracted.claimedToday === 'boolean') {
-          updateAccountSummary(account.id, {
-            balance: typeof extracted.balance === 'number' ? extracted.balance : null,
-            claimedToday: extracted.claimedToday,
-            available: typeof extracted.available === 'boolean' ? extracted.available : null,
-            amount: typeof extracted.amount === 'number' ? extracted.amount : null,
-            resetAt: typeof extracted.resetAt === 'string' ? extracted.resetAt : null,
-          });
-          verified = true;
-        } else {
-          warning = 'Cookie 已保存，但 summary 缺少预期字段';
-        }
-      }
-    }
-
-    const sealed = seal(captured.header, `account:${account.id}:v1`, deps.appKey);
-    updateAccountCookie(
-      account.id,
-      sealed,
-      fingerprintCookie(captured.header),
-      captured.header.length,
-      captured.names,
-      captured.expiresAt,
-      {
-        expiresAt: captured.expiresAt,
-        verified,
-        checkedAt: verified ? new Date().toISOString() : null,
-        authSource: 'browser',
-      },
-    );
-    await deps.login.markCaptured(id, owner, account.id);
-    audit('admin', 'cookie.capture', account.id, { fingerprint: fingerprintCookie(captured.header), domains: captured.domains });
-    logger.info({ accountId: account.id, providerId: account.plugin_id, fields: captured.names.length }, 'cookie captured');
-
-    return reply.send({
-      account: sanitizeAccount(getAccount(account.id)!, localDate(getSchedule().timezone)),
-      warning,
-      verified,
-      expiresAt: captured.expiresAt,
+    const account = createAccount({
+      pluginId: providerId,
+      label,
+      loginUrl: normalizeUrl(rawUrl),
+      authSource: 'browser',
     });
-  });
-
-  app.delete('/api/login-sessions/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const owner = request.session!.id;
-    const session = getLoginSession(id);
-    if (!session) return reply.code(204).send();
-    try {
-      await deps.login.close(id, owner, 'closed');
-    } catch (error) {
-      return reply.code((error as { httpStatus?: number }).httpStatus ?? 400).send({
-        error: { code: (error as { code?: string }).code ?? 'CLOSE_FAILED', message: (error as Error).message },
-      });
-    }
-    if (session.account_id) {
-      const account = getAccount(session.account_id);
-      if (account && !account.cookie_sealed && countRunsForAccount(account.id) === 0) {
-        deleteAccount(account.id);
-      }
-    }
-    return reply.code(204).send();
-  });
-
-  app.post('/api/accounts/:id/relogin', { config: { rateLimit: { max: 8, timeWindow: '5 minutes' } } }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const account = getAccount(id);
-    if (!account) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '账号不存在' } });
-    const provider = getProvider(account.plugin_id);
-    const loginUrl = account.login_url || provider?.loginUrl || '';
-    if (!loginUrl) {
-      return reply.code(400).send({ error: { code: 'LOGIN_URL_REQUIRED', message: '这个账号没有保存登录页地址' } });
-    }
-    try {
-      const session = await deps.login.start({
-        providerId: account.plugin_id,
-        loginUrl,
-        label: account.label,
-        ownerSession: request.session!.id,
-        accountId: account.id,
-      });
-      audit('admin', 'login.relogin', account.id, { sessionId: session.id });
-      return reply.code(201).send({ session: loginSessionDto(session.id), accountId: account.id });
-    } catch (error) {
-      return reply.code((error as { httpStatus?: number }).httpStatus ?? 500).send({
-        error: {
-          code: (error as { code?: string }).code ?? 'LOGIN_START_FAILED',
-          message: error instanceof Error ? error.message : '无法打开登录窗口',
-        },
-      });
-    }
+    audit('admin', 'account.create', account.id, { providerId, label });
+    return reply
+      .code(201)
+      .send({ account: sanitizeAccount(account, localDate(getSchedule().timezone)) });
   });
 
   /* ---------- check-in center ---------- */
@@ -1206,11 +996,11 @@ export async function createApp(deps: AppDeps) {
       openHours: 6,
     },
     browser: {
-      enabled: config.browserLogin,
-      available: await deps.login.available(),
-      allowPrivate: config.loginAllowPrivate,
-      sessionMinutes: config.loginSessionMinutes,
-      executable: config.chromiumPath || 'system chromium',
+      enabled: false,
+      available: false,
+      allowPrivate: false,
+      sessionMinutes: 0,
+      executable: '登录在你自己电脑的浏览器里完成',
     },
   }));
 

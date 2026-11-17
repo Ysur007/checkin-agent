@@ -3,7 +3,6 @@ import type { AccountDto } from '../types';
 import { del, patch, post } from '../api';
 import { formatDateTime, timeAgo } from '../format';
 import { ProviderIcon } from '../components/ProviderIcon';
-import { PairDialog } from '../components/PairDialog';
 import { IconAlert, IconCheck, IconRefresh, IconTrash } from '../components/icons';
 import type { ToastTone } from '../components/Toast';
 
@@ -18,7 +17,6 @@ interface Props {
 
 export function Accounts({ accounts, onAdd, onRelogin, onCookie, notify, onRefresh }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
-  const [pairing, setPairing] = useState<AccountDto | null>(null);
 
   const verify = async (account: AccountDto) => {
     setBusy(account.id);
@@ -66,7 +64,7 @@ export function Accounts({ accounts, onAdd, onRelogin, onCookie, notify, onRefre
       <div className="page-head">
         <div>
           <h2>账号与登录态</h2>
-          <p>每个账号的 Cookie 都单独加密保存；失效后复用浏览器配置重新登录，通常不需要再输密码。</p>
+          <p>每个账号的 Cookie 都单独加密保存；失效后复用浏览器配置登录，通常不需要再输密码。</p>
         </div>
         <button type="button" className="btn btn-primary" onClick={onAdd}>
           添加账号
@@ -149,14 +147,14 @@ export function Accounts({ accounts, onAdd, onRelogin, onCookie, notify, onRefre
 
                 {broken && (
                   <p className="account-warning">
-                    <IconAlert size={13} /> 登录态已失效，定时任务会跳过这个账号，直到重新登录。
+                    <IconAlert size={13} /> 登录态已失效，定时任务会跳过这个账号，直到登录。
                   </p>
                 )}
 
                 <footer className="account-actions">
                   {broken || !account.cookie.configured ? (
                     <button type="button" className="btn btn-primary btn-sm" onClick={() => onRelogin(account)}>
-                      重新登录
+                      登录
                     </button>
                   ) : (
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => void verify(account)} disabled={working}>
@@ -165,12 +163,9 @@ export function Accounts({ accounts, onAdd, onRelogin, onCookie, notify, onRefre
                   )}
                   {!broken && account.cookie.configured && (
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => onRelogin(account)}>
-                      重新登录
+                      登录
                     </button>
                   )}
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPairing(account)}>
-                    本机登录
-                  </button>
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => onCookie(account)}>
                     手动 Cookie
                   </button>
@@ -191,17 +186,6 @@ export function Accounts({ accounts, onAdd, onRelogin, onCookie, notify, onRefre
             );
           })}
         </div>
-      )}
-      {pairing && (
-        <PairDialog
-          account={pairing}
-          onClose={() => setPairing(null)}
-          onDone={() => {
-            setPairing(null);
-            notify('已从本机浏览器接收并加密保存 Cookie', 'success');
-            void onRefresh();
-          }}
-        />
       )}
     </div>
   );

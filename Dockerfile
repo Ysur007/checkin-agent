@@ -14,14 +14,13 @@ ENV NODE_ENV=production \
     TZ=Asia/Shanghai \
     PORT=8787 \
     DATA_DIR=/data \
-    BROWSER_LOGIN=1 \
-    PLAYWRIGHT_CHROMIUM_PATH=/usr/bin/chromium \
+    BROWSER_LOGIN=0 \
     XDG_CACHE_HOME=/tmp/cache \
     XDG_CONFIG_HOME=/tmp/config \
     HOME=/tmp
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      curl ca-certificates chromium fonts-wqy-microhei \
+      curl ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /data /tmp/cache /tmp/config \
   && chown -R node:node /data /app /tmp/cache /tmp/config

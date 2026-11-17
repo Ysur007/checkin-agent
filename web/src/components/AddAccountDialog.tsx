@@ -82,7 +82,7 @@ export function AddAccountDialog({ onClose, onStart }: Props) {
     try {
       await onStart({ providerId, loginUrl: url.trim(), label: label.trim() || '新账号' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : '无法打开登录窗口');
+      setError(err instanceof Error ? err.message : '创建账号失败');
       setBusy(false);
     }
   };
@@ -232,7 +232,7 @@ export function AddAccountDialog({ onClose, onStart }: Props) {
             返回
           </button>
           <button type="button" className="btn btn-primary" onClick={() => void start()} disabled={busy}>
-            {busy ? '正在打开浏览器…' : '打开登录窗口'}
+            {busy ? '正在创建…' : '创建并登录'}
           </button>
         </div>
       )}

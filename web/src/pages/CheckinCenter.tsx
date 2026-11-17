@@ -308,7 +308,7 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
           <div className="roster-head">
             <div>
               <h3>每日签到</h3>
-              <p>按平台分组；展开可以单独签到、重新登录或查看账号状态。</p>
+              <p>按平台分组；展开可以单独签到、更新登录态或查看账号状态。</p>
             </div>
             <div className="roster-actions">
               <button type="button" className="btn btn-ghost btn-sm" onClick={onAdd}>
@@ -491,7 +491,7 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
 
       {stats.attention > 0 && tab === 'daily' && (
         <p className="attention-note">
-          <IconAlert size={14} /> 有 {stats.attention} 个账号登录失效。展开对应平台，点「重新登录」会复用之前的浏览器配置，多数平台可以免密恢复。
+          <IconAlert size={14} /> 有 {stats.attention} 个账号登录失效。展开对应平台，点「登录 / 更新」会给出登录链接，登录后粘贴一次 Cookie 即可。
         </p>
       )}
     </div>

@@ -147,31 +147,17 @@ export function Settings({ notify }: Props) {
       <section className="card">
         <div className="card-head">
           <div>
-            <h3>登录浏览器</h3>
-            <p>账号登录与 Cookie 自动捕获由服务端的 Chromium 完成；没有浏览器组件时仍可手动录入 Cookie。</p>
+            <h3>登录方式</h3>
+            <p>登录在你自己的浏览器里完成：控制台点「登录」打开平台登录页，登录后把 Cookie 粘贴回来。</p>
           </div>
-          <span className={`pill pill-${data.browser.enabled && data.browser.available ? 'ok' : 'warn'}`}>
+          <span className="pill pill-ok">
             <i />
-            {data.browser.enabled && data.browser.available ? '可用' : data.browser.enabled ? '未安装' : '已关闭'}
+            本机登录
           </span>
         </div>
-        <div className="settings-grid">
-          <div className="field">
-            <span className="field-label">浏览器</span>
-            <span className="setting-value">{data.browser.available ? data.browser.executable : '未检测到 Chromium'}</span>
-          </div>
-          <div className="field">
-            <span className="field-label">会话时长</span>
-            <span className="setting-value">{data.browser.sessionMinutes} 分钟</span>
-          </div>
-          <div className="field">
-            <span className="field-label">内网地址</span>
-            <span className="setting-value">{data.browser.allowPrivate ? '允许（仅建议测试）' : '已阻止'}</span>
-          </div>
-        </div>
         <p className="security-note">
-          浏览器配置目录位于 <code>/data/profiles</code>，与数据库一样重要：它能让多数平台在 Cookie 失效后免密恢复登录。
-          备份或迁移时请连同 <code>app.key</code> 一起加密保存。
+          服务端不内置浏览器，也不需要额外的登录窗口：验证码、二次验证都在你本机处理，只把 Cookie 加密后交给服务端。
+          镜像因此更小，NAS 上也不占额外内存。
         </p>
       </section>
 

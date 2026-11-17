@@ -4,7 +4,6 @@ import { ApiError, get, post } from './api';
 import { Shell, type View } from './components/Shell';
 import { Toast, type ToastState, type ToastTone } from './components/Toast';
 import { AddAccountDialog } from './components/AddAccountDialog';
-import { LoginSessionDialog } from './components/LoginSessionDialog';
 import { CookieDialog } from './components/CookieDialog';
 import { RunDetailModal } from './components/RunDetailModal';
 import { Login } from './pages/Login';
@@ -22,7 +21,6 @@ export default function App() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [loginSessionId, setLoginSessionId] = useState<string | null>(null);
   const [cookieAccount, setCookieAccount] = useState<AccountDto | null>(null);
   const toastTimer = useRef<number | null>(null);
 
@@ -84,19 +82,11 @@ export default function App() {
     setToday(null);
   };
 
-  const startLogin = async (input: { providerId: string; loginUrl?: string; label: string }) => {
-    const result = await post<{ session: { id: string } }>('/api/login-sessions', input);
+  const createAccount = async (input: { providerId: string; loginUrl?: string; label: string }) => {
+    const result = await post<{ account: AccountDto }>('/api/accounts', input);
     setAddOpen(false);
-    setLoginSessionId(result.session.id);
-  };
-
-  const relogin = async (account: AccountDto) => {
-    try {
-      const result = await post<{ session: { id: string } }>(`/api/accounts/${account.id}/relogin`, {});
-      setLoginSessionId(result.session.id);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : '无法打开登录窗口', 'error');
-    }
+    await loadToday();
+    setCookieAccount(result.account);
   };
 
   if (!auth) {
@@ -153,7 +143,7 @@ export default function App() {
             data={today}
             onRefresh={loadToday}
             onAdd={() => setAddOpen(true)}
-            onRelogin={(account) => void relogin(account)}
+            onRelogin={setCookieAccount}
             onCookie={setCookieAccount}
             onRun={setRunId}
             notify={notify}
@@ -163,7 +153,7 @@ export default function App() {
           <Accounts
             accounts={today?.accounts ?? []}
             onAdd={() => setAddOpen(true)}
-            onRelogin={(account) => void relogin(account)}
+            onRelogin={setCookieAccount}
             onCookie={setCookieAccount}
             notify={notify}
             onRefresh={loadToday}
@@ -174,22 +164,7 @@ export default function App() {
         {view === 'settings' && <Settings notify={notify} />}
       </Shell>
 
-      {addOpen && <AddAccountDialog onClose={() => setAddOpen(false)} onStart={startLogin} />}
-
-      {loginSessionId && (
-        <LoginSessionDialog
-          sessionId={loginSessionId}
-          onClose={() => setLoginSessionId(null)}
-          onCaptured={(account, warning) => {
-            setLoginSessionId(null);
-            notify(
-              warning ? `${account.label} 已保存，${warning}` : `${account.label} 登录成功，Cookie 已加密保存`,
-              warning ? 'info' : 'success',
-            );
-            void loadToday();
-          }}
-        />
-      )}
+      {addOpen && <AddAccountDialog onClose={() => setAddOpen(false)} onStart={createAccount} />}
 
       {cookieAccount && (
         <CookieDialog

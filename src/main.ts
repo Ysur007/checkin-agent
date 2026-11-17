@@ -8,7 +8,6 @@ import { loadBuiltinPlugins } from './plugins/loader.js';
 import { ClaimRunner } from './runner/claimRunner.js';
 import { startScheduler } from './scheduler/scheduler.js';
 import { createApp } from './api.js';
-import { createLoginManager } from './login/manager.js';
 import { sweepAccountHealth } from './accounts/health.js';
 import { refreshEnvironment } from './risk/environment.js';
 
@@ -32,10 +31,8 @@ async function main(): Promise<void> {
   }
 
   const runner = new ClaimRunner(appKey.key);
-  const login = createLoginManager();
   const app = await createApp({
     runner,
-    login,
     appKey: appKey.key,
     keyFingerprint: appKey.fingerprint,
   });
@@ -77,7 +74,6 @@ async function main(): Promise<void> {
     clearInterval(healthTimer);
     clearInterval(envTimer);
     clearTimeout(bootProbe);
-    await login.shutdown().catch(() => undefined);
     try {
       await app.close();
     } catch {
