@@ -63,6 +63,19 @@ docker compose up -d --build
 
 这样做的原因很实际：浏览器不允许一个站点读取另一个站点的 Cookie（尤其是 HttpOnly 的 session），所以要么装桌面客户端或浏览器扩展，要么复制一次。我们把成本压在「复制一次」上，服务端因此完全不占浏览器内存——镜像从 976MB 降到 282MB。
 
+### 浏览器扩展：装一次，之后全自动
+
+不想手动复制就用扩展。`extension/` 里是一个 MV3 扩展，服务端也直接提供下载（`/checkin-agent-extension.zip`）。
+
+1. 控制台 → 设置 → 浏览器扩展 → 下载并解压
+2. `chrome://extensions`（Edge 是 `edge://extensions`）→ 打开开发者模式 → 加载已解压的扩展程序
+3. 在同一张卡片里点「生成扩展令牌」，把令牌和控制台地址填进扩展弹窗
+4. 去平台登录，登录完点扩展图标 →「读取当前站点 Cookie 并保存」
+
+扩展用 `chrome.cookies` 读取**当前标签所属站点**的 Cookie（包括 HttpOnly），带上 Bearer 令牌 POST 到 `/api/ext/cookie`；服务端校验、加密、返回 verified。令牌只存哈希，可随时吊销，扩展本身不联网保存任何东西。
+
+为什么这条路可行而纯网页不行：浏览器不允许 A 站点读取 B 站点的 Cookie，但扩展在获得 `cookies` + host 权限后可以——这也是 1Password、各类会话管理器的做法。
+
 ## 登录与 Cookie 生命周期
 
 ```
