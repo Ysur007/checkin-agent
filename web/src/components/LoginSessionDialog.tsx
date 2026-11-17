@@ -36,6 +36,7 @@ export function LoginSessionDialog({ sessionId, onClose, onCaptured }: Props) {
   const closed = useRef(false);
   const autoTried = useRef(false);
   const capturingRef = useRef(false);
+  const captureRef = useRef<() => Promise<void>>(async () => undefined);
 
   const loadSession = useCallback(async () => {
     try {
@@ -146,12 +147,14 @@ export function LoginSessionDialog({ sessionId, onClose, onCaptured }: Props) {
     }
   }, [loadSession, onCaptured, sessionId]);
 
+  captureRef.current = capture;
+
   useEffect(() => {
     if (session?.status !== 'ready' || captured.current || autoTried.current) return;
     autoTried.current = true;
-    const timer = window.setTimeout(() => void capture(), 1200);
+    const timer = window.setTimeout(() => void captureRef.current(), 1200);
     return () => window.clearTimeout(timer);
-  }, [capture, session?.status]);
+  }, [session?.status]);
 
   const close = async () => {
     closed.current = true;
