@@ -1,0 +1,21 @@
+# NAS 部署用 compose：镜像在设备本地构建，数据落在 ./data。
+services:
+  checkin-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: checkin-agent:0.2.0
+    container_name: checkin-agent
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    volumes:
+      - ./data:/data
+    environment:
+      TZ: Asia/Shanghai
+      BROWSER_LOGIN: "1"
+      PLAYWRIGHT_CHROMIUM_PATH: /usr/bin/chromium
+      COOKIE_SECURE: "0"
+    mem_limit: 1280m
+    security_opt:
+      - no-new-privileges:true
