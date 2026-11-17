@@ -31,6 +31,9 @@ import {
   listClaimDaysSince,
   listPluginRows,
   listRuns,
+  isAutomationPaused,
+  recordRiskEvent,
+  setAutomationPaused,
   latestRunForAccount,
   runForDate,
   setAccountConfig,
@@ -65,6 +68,8 @@ import { seal, open } from './crypto/seal.js';
 import { localDate, nextRunLabel } from './lib/time.js';
 import type { ClaimRunner } from './runner/claimRunner.js';
 import { CUSTOM_PROVIDER_ID, PROVIDERS, getProvider, isKnownProvider } from './providers/catalog.js';
+import { getAutomationPolicy } from './providers/policy.js';
+import { checkPlatform, getRiskOverview, recentRiskEvents, resetAllBreakers, resetBreaker } from './risk/breaker.js';
 import { isCookieExpired, verifyAccount } from './accounts/health.js';
 import type { LoginSessionManager } from './login/manager.js';
 import { safeDisplayUrl } from './login/url.js';
@@ -97,6 +102,7 @@ function providerMeta(pluginId: string) {
       description: def.description,
       primaryCookie: def.primaryCookie,
       checkIn: Boolean(plugin?.adapter),
+      policy: getAutomationPolicy(def.id),
     };
   }
   if (plugin) {
@@ -108,6 +114,7 @@ function providerMeta(pluginId: string) {
       description: plugin.manifest.description,
       primaryCookie: plugin.manifest.auth.primaryCookie,
       checkIn: true,
+      policy: getAutomationPolicy(plugin.id),
     };
   }
   return {
@@ -118,6 +125,7 @@ function providerMeta(pluginId: string) {
     description: '用户自定义登录平台',
     primaryCookie: null,
     checkIn: false,
+    policy: getAutomationPolicy(pluginId),
   };
 }
 
@@ -407,6 +415,7 @@ export async function createApp(deps: AppDeps) {
         return {
           ...provider,
           adapterReady: Boolean(plugin),
+          policy: getAutomationPolicy(provider.id),
           accountCount: counts.get(provider.id) ?? 0,
           accounts: accounts
             .filter((account) => account.plugin_id === provider.id)
@@ -855,8 +864,17 @@ export async function createApp(deps: AppDeps) {
 
       const result = await deps.runner.start({ accountId: account.id, trigger: 'manual' });
       if (result.error) {
-        const status = result.error === 'ALREADY_CLAIMED' ? 409 : result.error === 'LOCK_HELD' ? 409 : 500;
-        return reply.code(status).send({ error: { code: result.error, message: result.message ?? result.error }, runId: result.runId });
+        const conflict = [
+          'ALREADY_CLAIMED',
+          'LOCK_HELD',
+          'CIRCUIT_OPEN',
+          'CIRCUIT_BUSY',
+          'AUTOMATION_PAUSED',
+          'POLICY_BLOCKED',
+        ].includes(result.error);
+        return reply
+          .code(conflict ? 409 : 500)
+          .send({ error: { code: result.error, message: result.message ?? result.error }, runId: result.runId });
       }
       audit('admin', 'checkin.manual', account.id, { runId: result.runId });
       return reply.code(202).send({ runId: result.runId, accountId: account.id });
@@ -867,9 +885,13 @@ export async function createApp(deps: AppDeps) {
     '/api/checkins/bulk',
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (request, reply) => {
+      if (isAutomationPaused()) {
+        return reply.code(409).send({ error: { code: 'AUTOMATION_PAUSED', message: '自动化已暂停，请先在风险面板恢复' } });
+      }
       const body = request.body as { accountIds?: string[] } | undefined;
       const requested = Array.isArray(body?.accountIds) ? new Set(body!.accountIds!.map(String)) : null;
       const today = localDate(getSchedule().timezone);
+      const gates = new Map<string, ReturnType<typeof checkPlatform>>();
       const started: Array<{ accountId: string; runId?: string }> = [];
       const skipped: Array<{ accountId: string; label: string; reason: string }> = [];
 
@@ -885,6 +907,16 @@ export async function createApp(deps: AppDeps) {
         }
         if (!getLoadedPlugin(account.plugin_id)) {
           skipped.push({ accountId: account.id, label: account.label, reason: '签到待适配' });
+          continue;
+        }
+        if (getAutomationPolicy(account.plugin_id).automation === 'prohibited') {
+          skipped.push({ accountId: account.id, label: account.label, reason: '平台策略禁止自动化' });
+          continue;
+        }
+        if (!gates.has(account.plugin_id)) gates.set(account.plugin_id, checkPlatform(account.plugin_id));
+        const gate = gates.get(account.plugin_id)!;
+        if (gate.blocked) {
+          skipped.push({ accountId: account.id, label: account.label, reason: '平台熔断中' });
           continue;
         }
         if (getClaimDay(account.id, today)) {
@@ -987,6 +1019,13 @@ export async function createApp(deps: AppDeps) {
     keyFingerprint: deps.keyFingerprint,
     cookieSecure: config.cookieSecure,
     envPassword: Boolean(config.adminPassword),
+    risk: {
+      paused: isAutomationPaused(),
+      strikeLimit: 3,
+      challengeRate: 0.2,
+      minSamples: 5,
+      openHours: 6,
+    },
     browser: {
       enabled: config.browserLogin,
       available: await deps.login.available(),
@@ -1010,6 +1049,9 @@ export async function createApp(deps: AppDeps) {
     }
     if (!Number.isInteger(next.jitterSeconds) || next.jitterSeconds < 0 || next.jitterSeconds > 3600) {
       return reply.code(400).send({ error: { code: 'INVALID_JITTER', message: '抖动需为 0–3600 秒' } });
+    }
+    if (!Number.isInteger(next.spreadSeconds) || next.spreadSeconds < 0 || next.spreadSeconds > 14_400) {
+      return reply.code(400).send({ error: { code: 'INVALID_SPREAD', message: '随机窗口需为 0–14400 秒' } });
     }
     try {
       new Intl.DateTimeFormat('en-US', { timeZone: next.timezone }).format(new Date());
@@ -1039,6 +1081,52 @@ export async function createApp(deps: AppDeps) {
         meta: parseJson(row.meta),
       })),
     };
+  });
+
+  /* ---------- risk ---------- */
+
+  app.get('/api/risk', async () => getRiskOverview());
+
+  app.get('/api/risk/events', async (request) => {
+    const query = request.query as { limit?: string };
+    return {
+      items: recentRiskEvents(Number(query.limit ?? 40)).map((event) => ({
+        id: event.id,
+        at: event.at,
+        platformId: event.platform_id,
+        platform: providerMeta(event.platform_id).name,
+        accountId: event.account_id,
+        kind: event.kind,
+        detail: parseJson(event.detail),
+      })),
+    };
+  });
+
+  app.post('/api/risk/pause', async (request, reply) => {
+    const body = request.body as { paused?: boolean };
+    if (typeof body?.paused !== 'boolean') {
+      return reply.code(400).send({ error: { code: 'INVALID_BODY', message: '缺少 paused' } });
+    }
+    setAutomationPaused(body.paused);
+    recordRiskEvent({
+      platformId: 'system',
+      kind: body.paused ? 'pause' : 'resume',
+      detail: { at: new Date().toISOString() },
+    });
+    audit('admin', body.paused ? 'risk.pause' : 'risk.resume', null);
+    return { paused: body.paused };
+  });
+
+  app.post('/api/risk/reset', async (request) => {
+    const body = request.body as { platformId?: string } | undefined;
+    if (body?.platformId) {
+      resetBreaker(String(body.platformId), '控制台手动恢复');
+      audit('admin', 'risk.reset', String(body.platformId));
+    } else {
+      resetAllBreakers();
+      audit('admin', 'risk.reset', null);
+    }
+    return getRiskOverview();
   });
 
   /* ---------- static web ---------- */

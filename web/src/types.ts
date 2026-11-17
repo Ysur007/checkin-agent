@@ -4,6 +4,14 @@ export interface AuthStatus {
   version: string;
 }
 
+export interface AutomationPolicy {
+  automation: 'allowed' | 'unknown' | 'prohibited';
+  officialApi: boolean;
+  termsUrl?: string;
+  note: string;
+  reviewedAt?: string;
+}
+
 export interface ProviderMeta {
   id: string;
   name: string;
@@ -12,6 +20,7 @@ export interface ProviderMeta {
   description: string;
   primaryCookie: string | null;
   checkIn: boolean;
+  policy: AutomationPolicy;
 }
 
 export interface CookieInfo {
@@ -140,6 +149,7 @@ export interface Schedule {
   time: string;
   timezone: string;
   jitterSeconds: number;
+  spreadSeconds: number;
   windowStart: string;
   windowEnd: string;
 }
@@ -231,6 +241,13 @@ export interface SettingsData {
   keyFingerprint: string;
   cookieSecure: boolean;
   envPassword: boolean;
+  risk: {
+    paused: boolean;
+    strikeLimit: number;
+    challengeRate: number;
+    minSamples: number;
+    openHours: number;
+  };
   browser: {
     enabled: boolean;
     available: boolean;
@@ -246,4 +263,41 @@ export interface AuditItem {
   action: string;
   target: string | null;
   meta: Record<string, unknown>;
+}
+
+
+export interface RiskPlatform {
+  platformId: string;
+  name: string;
+  state: 'closed' | 'open' | 'half_open';
+  blocked: boolean;
+  reason: string | null;
+  openUntil: string | null;
+  strikes: number;
+  runs24h: number;
+  challenges24h: number;
+  challengeRate: number;
+  policy: AutomationPolicy;
+}
+
+export interface RiskOverview {
+  paused: boolean;
+  totals: {
+    runs24h: number;
+    challenges24h: number;
+    rate: number;
+    events24h: number;
+  };
+  platforms: RiskPlatform[];
+  generatedAt: string;
+}
+
+export interface RiskEventItem {
+  id: number;
+  at: string;
+  platformId: string;
+  platform: string;
+  accountId: string | null;
+  kind: string;
+  detail: Record<string, unknown>;
 }

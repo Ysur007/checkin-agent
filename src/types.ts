@@ -212,3 +212,26 @@ export interface ClaimDayRow {
   created_at: string;
   updated_at: string;
 }
+
+
+export type CircuitState = 'closed' | 'open' | 'half_open';
+
+export interface CircuitBreakerRow {
+  platform_id: string;
+  state: CircuitState;
+  reason: string | null;
+  opened_at: string | null;
+  open_until: string | null;
+  strikes: number;
+  window_start: string;
+  updated_at: string;
+}
+
+export interface RiskEventRow {
+  id: number;
+  at: string;
+  platform_id: string;
+  account_id: string | null;
+  kind: string;
+  detail: string | null;
+}

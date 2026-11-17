@@ -5,10 +5,13 @@ import { config } from '../config.js';
 import { db } from './index.js';
 import type {
   AccountRow,
+  CircuitBreakerRow,
+  CircuitState,
   ClaimDayRow,
   LoginSessionRow,
   LoginSessionStatus,
   PluginRecord,
+  RiskEventRow,
   RunEvent,
   RunRow,
   RunStatus,
@@ -40,18 +43,23 @@ export interface ScheduleSettings {
   time: string;
   timezone: string;
   jitterSeconds: number;
+  /** 在基准时间后额外随机散开的秒数，默认 30 分钟。 */
+  spreadSeconds: number;
   windowStart: string;
   windowEnd: string;
 }
 
 export function getSchedule(): ScheduleSettings {
-  return getSetting<ScheduleSettings>('schedule', {
+  const defaults: ScheduleSettings = {
     time: '08:10',
     timezone: config.timezone,
     jitterSeconds: 240,
+    spreadSeconds: 1800,
     windowStart: '08:00',
     windowEnd: '23:59',
-  });
+  };
+  const stored = getSetting<Partial<ScheduleSettings>>('schedule', {});
+  return { ...defaults, ...stored, spreadSeconds: stored.spreadSeconds ?? defaults.spreadSeconds };
 }
 
 export function setSchedule(value: ScheduleSettings): void {
@@ -683,4 +691,137 @@ export function listAudit(limit = 50): Array<{ id: number; at: string; actor: st
     target: string | null;
     meta: string | null;
   }>;
+}
+
+
+/* ---------------- risk controls ---------------- */
+
+export function isAutomationPaused(): boolean {
+  return getSetting<boolean>('automationPaused', false);
+}
+
+export function setAutomationPaused(paused: boolean): void {
+  setSetting('automationPaused', paused);
+}
+
+export function recordRiskEvent(input: {
+  platformId: string;
+  accountId?: string | null;
+  kind: string;
+  detail?: unknown;
+}): void {
+  db.prepare('INSERT INTO risk_events (at, platform_id, account_id, kind, detail) VALUES (?, ?, ?, ?, ?)').run(
+    nowIso(),
+    input.platformId,
+    input.accountId ?? null,
+    input.kind,
+    input.detail === undefined ? null : JSON.stringify(input.detail),
+  );
+}
+
+export function listRiskEvents(limit = 50, platformId?: string): RiskEventRow[] {
+  const safe = Math.min(Math.max(limit, 1), 200);
+  if (platformId) {
+    return db
+      .prepare('SELECT * FROM risk_events WHERE platform_id = ? ORDER BY at DESC LIMIT ?')
+      .all(platformId, safe) as RiskEventRow[];
+  }
+  return db.prepare('SELECT * FROM risk_events ORDER BY at DESC LIMIT ?').all(safe) as RiskEventRow[];
+}
+
+export function countRiskEventsSince(platformId: string, since: string, kinds?: string[]): number {
+  if (kinds && kinds.length > 0) {
+    const placeholders = kinds.map(() => '?').join(',');
+    const row = db
+      .prepare(`SELECT COUNT(*) AS count FROM risk_events WHERE platform_id = ? AND at >= ? AND kind IN (${placeholders})`)
+      .get(platformId, since, ...kinds) as { count: number };
+    return row.count;
+  }
+  const row = db
+    .prepare('SELECT COUNT(*) AS count FROM risk_events WHERE platform_id = ? AND at >= ?')
+    .get(platformId, since) as { count: number };
+  return row.count;
+}
+
+export function countAllRiskEventsSince(since: string, kinds?: string[]): number {
+  if (kinds && kinds.length > 0) {
+    const placeholders = kinds.map(() => '?').join(',');
+    const row = db
+      .prepare(`SELECT COUNT(*) AS count FROM risk_events WHERE at >= ? AND kind IN (${placeholders})`)
+      .get(since, ...kinds) as { count: number };
+    return row.count;
+  }
+  const row = db.prepare('SELECT COUNT(*) AS count FROM risk_events WHERE at >= ?').get(since) as { count: number };
+  return row.count;
+}
+
+export function getBreaker(platformId: string): CircuitBreakerRow | undefined {
+  return db.prepare('SELECT * FROM circuit_breakers WHERE platform_id = ?').get(platformId) as
+    | CircuitBreakerRow
+    | undefined;
+}
+
+export function listBreakers(): CircuitBreakerRow[] {
+  return db.prepare('SELECT * FROM circuit_breakers ORDER BY updated_at DESC').all() as CircuitBreakerRow[];
+}
+
+export function saveBreaker(input: {
+  platformId: string;
+  state: CircuitState;
+  reason: string | null;
+  openedAt: string | null;
+  openUntil: string | null;
+  strikes: number;
+  windowStart: string;
+}): void {
+  db.prepare(
+    `INSERT INTO circuit_breakers (platform_id, state, reason, opened_at, open_until, strikes, window_start, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(platform_id) DO UPDATE SET
+       state = excluded.state,
+       reason = excluded.reason,
+       opened_at = excluded.opened_at,
+       open_until = excluded.open_until,
+       strikes = excluded.strikes,
+       window_start = excluded.window_start,
+       updated_at = excluded.updated_at`,
+  ).run(
+    input.platformId,
+    input.state,
+    input.reason,
+    input.openedAt,
+    input.openUntil,
+    input.strikes,
+    input.windowStart,
+    nowIso(),
+  );
+}
+
+export function countRunsStartedSince(iso: string, triggers: string[] = ['schedule', 'backfill']): number {
+  const placeholders = triggers.map(() => '?').join(',');
+  const row = db
+    .prepare(`SELECT COUNT(*) AS count FROM runs WHERE started_at >= ? AND trigger IN (${placeholders})`)
+    .get(iso, ...triggers) as { count: number };
+  return row.count;
+}
+
+export function countPlatformRunsSince(platformId: string, since: string): number {
+  const row = db
+    .prepare('SELECT COUNT(*) AS count FROM runs WHERE plugin_id = ? AND started_at >= ?')
+    .get(platformId, since) as { count: number };
+  return row.count;
+}
+
+export function countActiveLocks(now = Date.now()): number {
+  const row = db
+    .prepare('SELECT COUNT(*) AS count FROM accounts WHERE lock_expires_at IS NOT NULL AND lock_expires_at > ?')
+    .get(now) as { count: number };
+  return row.count;
+}
+
+export function platformHasActiveLock(platformId: string, now = Date.now()): boolean {
+  const row = db
+    .prepare('SELECT 1 AS busy FROM accounts WHERE plugin_id = ? AND lock_expires_at > ? LIMIT 1')
+    .get(platformId, now) as { busy: number } | undefined;
+  return Boolean(row);
 }

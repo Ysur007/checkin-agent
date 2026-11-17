@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { AccountDto, CheckinRecordsData, CheckinTodayData } from '../types';
+import type { AccountDto, CheckinRecordsData, CheckinTodayData, RiskOverview } from '../types';
 import { get, patch, post, waitForRun } from '../api';
 import { formatNumber, timeAgo } from '../format';
 import { ProviderIcon } from '../components/ProviderIcon';
+import { RiskBar } from '../components/RiskBar';
+import { RiskEventsModal } from '../components/RiskEventsModal';
 import { IconAlert, IconCheck, IconClock, IconPlay, IconRefresh } from '../components/icons';
 import type { ToastTone } from '../components/Toast';
 
@@ -53,6 +55,9 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
   const [bulk, setBulk] = useState(false);
   const [records, setRecords] = useState<CheckinRecordsData | null>(null);
   const [recordsError, setRecordsError] = useState('');
+  const [risk, setRisk] = useState<RiskOverview | null>(null);
+  const [riskBusy, setRiskBusy] = useState(false);
+  const [riskEventsOpen, setRiskEventsOpen] = useState(false);
 
   const loadRecords = useCallback(async () => {
     try {
@@ -66,6 +71,20 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
   useEffect(() => {
     if (tab === 'records') void loadRecords();
   }, [tab, loadRecords]);
+
+  const loadRisk = useCallback(async () => {
+    try {
+      setRisk(await get<RiskOverview>('/api/risk'));
+    } catch {
+      /* 风险面板失败不阻塞签到 */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRisk();
+    const timer = window.setInterval(() => void loadRisk(), 20_000);
+    return () => window.clearInterval(timer);
+  }, [loadRisk]);
 
   const groups = useMemo<Group[]>(() => {
     const map = new Map<string, Group>();
@@ -106,6 +125,7 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
         ok ? 'success' : 'error',
       );
       await onRefresh();
+      void loadRisk();
     } catch (error) {
       notify(error instanceof Error ? error.message : '签到失败', 'error');
     } finally {
@@ -126,10 +146,38 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
         notify(`已开始 ${result.started.length} 个账号的签到，结果会自动刷新`, 'success');
       }
       await onRefresh();
+      void loadRisk();
     } catch (error) {
       notify(error instanceof Error ? error.message : '批量签到失败', 'error');
     } finally {
       setBulk(false);
+    }
+  };
+
+  const togglePause = async (paused: boolean) => {
+    setRiskBusy(true);
+    try {
+      await post('/api/risk/pause', { paused });
+      notify(paused ? '自动化已暂停；定时和手动签到都会被拦截' : '自动化已恢复', 'success');
+      await loadRisk();
+      await onRefresh();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '操作失败', 'error');
+    } finally {
+      setRiskBusy(false);
+    }
+  };
+
+  const resetPlatform = async (platformId?: string) => {
+    setRiskBusy(true);
+    try {
+      await post('/api/risk/reset', platformId ? { platformId } : {});
+      notify(platformId ? '已恢复该平台，下一次执行会作为半开验证' : '已恢复全部平台', 'success');
+      await loadRisk();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '恢复失败', 'error');
+    } finally {
+      setRiskBusy(false);
     }
   };
 
@@ -161,6 +209,16 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
           </button>
         </div>
       </div>
+
+      {risk && (
+        <RiskBar
+          risk={risk}
+          busy={riskBusy}
+          onPause={(paused) => void togglePause(paused)}
+          onReset={(platformId) => void resetPlatform(platformId)}
+          onEvents={() => setRiskEventsOpen(true)}
+        />
+      )}
 
       <div className="stats-grid">
         <div className="stat-card">
@@ -382,6 +440,8 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
           ))}
         </section>
       )}
+
+      {riskEventsOpen && <RiskEventsModal onClose={() => setRiskEventsOpen(false)} />}
 
       {stats.attention > 0 && tab === 'daily' && (
         <p className="attention-note">

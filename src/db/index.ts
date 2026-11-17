@@ -1,6 +1,12 @@
 import Database from 'better-sqlite3';
 import { config } from '../config.js';
-import { ACCOUNT_COLUMNS_V2, MIGRATION_2_SQL, MIGRATION_SQL, MIGRATION_VERSION } from './migrations.js';
+import {
+  ACCOUNT_COLUMNS_V2,
+  MIGRATION_2_SQL,
+  MIGRATION_3_SQL,
+  MIGRATION_SQL,
+  MIGRATION_VERSION,
+} from './migrations.js';
 
 export const db = new Database(config.dbPath);
 
@@ -35,8 +41,10 @@ export function migrate(): void {
         if (!hasColumn('accounts', column.name)) db.exec(column.ddl);
       }
       markVersion(2, 'login-sessions-and-claim-ledger');
-    } else {
-      markVersion(current, 'baseline');
+    }
+    if (current < 3) {
+      db.exec(MIGRATION_3_SQL);
+      markVersion(3, 'risk-events-and-circuit-breakers');
     }
   });
 

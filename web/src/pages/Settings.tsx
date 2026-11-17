@@ -13,6 +13,7 @@ export function Settings({ notify }: Props) {
   const [time, setTime] = useState('08:10');
   const [timezone, setTimezone] = useState('Asia/Shanghai');
   const [jitter, setJitter] = useState('240');
+  const [spread, setSpread] = useState('30');
   const [windowStart, setWindowStart] = useState('08:00');
   const [windowEnd, setWindowEnd] = useState('23:59');
   const [busy, setBusy] = useState(false);
@@ -29,6 +30,7 @@ export function Settings({ notify }: Props) {
         setTime(settings.schedule.time);
         setTimezone(settings.schedule.timezone);
         setJitter(String(settings.schedule.jitterSeconds));
+        setSpread(String(Math.round((settings.schedule.spreadSeconds ?? 1800) / 60)));
         setWindowStart(settings.schedule.windowStart);
         setWindowEnd(settings.schedule.windowEnd);
       })
@@ -43,6 +45,7 @@ export function Settings({ notify }: Props) {
           time,
           timezone,
           jitterSeconds: Number(jitter),
+          spreadSeconds: Math.max(0, Math.round(Number(spread || 0) * 60)),
           windowStart,
           windowEnd,
         },
@@ -116,6 +119,11 @@ export function Settings({ notify }: Props) {
           <label className="field">
             <span className="field-label">抖动上限（秒）</span>
             <input type="number" min="0" max="3600" value={jitter} onChange={(event) => setJitter(event.target.value)} />
+          </label>
+          <label className="field">
+            <span className="field-label">随机窗口（分钟）</span>
+            <input type="number" min="0" max="240" value={spread} onChange={(event) => setSpread(event.target.value)} />
+            <span className="field-hint">每天在基准时间后随机散开；账号多时建议 30–60 分钟。</span>
           </label>
           <label className="field">
             <span className="field-label">补跑窗口开始</span>

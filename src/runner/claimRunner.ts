@@ -6,6 +6,8 @@ import {
   getAccount,
   getClaimDay,
   getRunByIdem,
+  isAutomationPaused,
+  platformHasActiveLock,
   getSchedule,
   insertRun,
   newId,
@@ -19,6 +21,8 @@ import {
 } from '../db/repo.js';
 import { getLoadedPlugin } from '../plugins/loader.js';
 import { getProvider } from '../providers/catalog.js';
+import { getAutomationPolicy } from '../providers/policy.js';
+import { checkPlatform, recordOutcome } from '../risk/breaker.js';
 import { open } from '../crypto/seal.js';
 import { errorMessage, redactDetail } from '../crypto/redact.js';
 import { localDate } from '../lib/time.js';
@@ -36,6 +40,9 @@ export interface StartResult {
 }
 
 export class ClaimRunner {
+  /** 全局串行队列：手动、批量、定时共用，避免同平台并发。 */
+  private queue: Promise<void> = Promise.resolve();
+
   constructor(private readonly key: Buffer) {}
 
   async start(input: { accountId: string; trigger: Trigger }): Promise<StartResult> {
@@ -53,8 +60,26 @@ export class ClaimRunner {
       };
     }
 
+    const policy = getAutomationPolicy(account.plugin_id);
+    if (policy.automation === 'prohibited') {
+      return { error: 'POLICY_BLOCKED', message: '该平台的自动化策略标记为禁止，已阻止签到' };
+    }
+    if (isAutomationPaused()) {
+      return { error: 'AUTOMATION_PAUSED', message: '自动化已暂停，请在风险面板恢复后再执行' };
+    }
+    const gate = checkPlatform(plugin.id);
+    if (gate.blocked) {
+      return {
+        error: 'CIRCUIT_OPEN',
+        message: `平台因连续验证挑战已暂停${gate.openUntil ? `（至 ${gate.openUntil.slice(0, 16).replace('T', ' ')} UTC）` : ''}`,
+      };
+    }
+    if (gate.halfOpen && platformHasActiveLock(plugin.id)) {
+      return { error: 'CIRCUIT_BUSY', message: '平台处于半开验证，已有账号在运行，稍后再试' };
+    }
+
     const token = newId();
-    if (!acquireLock(account.id, token, Date.now() + 60_000)) {
+    if (!acquireLock(account.id, token, Date.now() + 15 * 60_000)) {
       return { error: 'LOCK_HELD', message: '已有任务在运行' };
     }
 
@@ -104,9 +129,11 @@ export class ClaimRunner {
       }
 
       addEvent(runId, 'state', { status: 'queued', trigger: input.trigger, attempt });
-      setImmediate(() => {
-        void this.execute({ runId, account, plugin, trigger: input.trigger, lockToken: token, date });
-      });
+      this.queue = this.queue
+        .then(() => this.execute({ runId, account, plugin, trigger: input.trigger, lockToken: token, date }))
+        .catch((error) => {
+          logger.error({ runId, error: errorMessage(error) }, 'queued run failed');
+        });
       return { runId };
     } catch (error) {
       releaseLock(account.id, token);
@@ -160,6 +187,16 @@ export class ClaimRunner {
             httpStatus: outcome.httpStatus ?? null,
             verified: outcome.verified || outcome.status === 'already_claimed',
           });
+        }
+        try {
+          recordOutcome({
+            platformId: plugin.id,
+            accountId: account.id,
+            status: outcome.status,
+            errorCode: outcome.errorCode ?? null,
+          });
+        } catch (error) {
+          logger.warn({ runId, accountId: account.id, error: errorMessage(error) }, 'failed to record risk outcome');
         }
         updateAccountAfterRun(account.id, outcome.status, outcome.errorCode ?? null);
         if (outcome.summary) {

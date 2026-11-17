@@ -165,7 +165,36 @@ CREATE TABLE IF NOT EXISTS claim_days (
 CREATE INDEX IF NOT EXISTS ix_claim_days_date ON claim_days(local_date DESC);
 `;
 
-export const MIGRATION_VERSION = 2;
+/**
+ * v3：风险事件与平台级熔断。
+ * risk_events 只记录行为层信号（挑战、限流、暂停、熔断），不记录 Cookie 或响应正文。
+ */
+export const MIGRATION_3_SQL = `
+CREATE TABLE IF NOT EXISTS risk_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  platform_id TEXT NOT NULL,
+  account_id TEXT,
+  kind TEXT NOT NULL,
+  detail TEXT
+);
+
+CREATE INDEX IF NOT EXISTS ix_risk_events_platform_at ON risk_events(platform_id, at DESC);
+CREATE INDEX IF NOT EXISTS ix_risk_events_at ON risk_events(at DESC);
+
+CREATE TABLE IF NOT EXISTS circuit_breakers (
+  platform_id TEXT PRIMARY KEY,
+  state TEXT NOT NULL DEFAULT 'closed',
+  reason TEXT,
+  opened_at TEXT,
+  open_until TEXT,
+  strikes INTEGER NOT NULL DEFAULT 0,
+  window_start TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`;
+
+export const MIGRATION_VERSION = 3;
 
 /** 旧库升级时需要补的列；新库已包含在 MIGRATION_SQL 里。 */
 export const ACCOUNT_COLUMNS_V2: Array<{ name: string; ddl: string }> = [
