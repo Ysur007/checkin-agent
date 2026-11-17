@@ -255,7 +255,24 @@ CREATE TABLE IF NOT EXISTS pairing_codes (
 CREATE INDEX IF NOT EXISTS ix_pairing_expires ON pairing_codes(expires_at);
 `;
 
-export const MIGRATION_VERSION = 6;
+/**
+ * v7：浏览器扩展令牌。
+ * 扩展用长期令牌调用 /api/ext/*，不接触管理员密码；令牌只存哈希，可随时吊销。
+ */
+export const MIGRATION_7_SQL = `
+CREATE TABLE IF NOT EXISTS extension_tokens (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  token_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT,
+  revoked_at TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ix_ext_token_hash ON extension_tokens(token_hash);
+`;
+
+export const MIGRATION_VERSION = 7;
 
 /** 旧库升级时需要补的列；新库已包含在 MIGRATION_SQL 里。 */
 export const ACCOUNT_COLUMNS_V2: Array<{ name: string; ddl: string }> = [

@@ -3298,3 +3298,60 @@ dt {
 .cookie-hint-foot svg {
   flex: 0 0 auto;
 }
+
+/* ---------- extension tokens ---------- */
+
+.token-once {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.token-once span {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+.token-once code {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  word-break: break-all;
+  color: var(--ink);
+}
+
+.token-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.token-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.token-row:last-child {
+  border-bottom: 0;
+}
+
+.token-row strong {
+  font-size: 11.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

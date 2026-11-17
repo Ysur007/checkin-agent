@@ -997,3 +997,43 @@ export function markPairingUsed(code: string): void {
 export function dropPairing(code: string): void {
   db.prepare('DELETE FROM pairing_codes WHERE code = ?').run(code);
 }
+
+/* ---------------- browser extension tokens ---------------- */
+
+export interface ExtensionTokenRow {
+  id: string;
+  label: string;
+  token_hash: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export function createExtensionToken(id: string, label: string, tokenHash: string): ExtensionTokenRow {
+  const now = nowIso();
+  db.prepare('INSERT INTO extension_tokens (id, label, token_hash, created_at) VALUES (?, ?, ?, ?)').run(
+    id,
+    label,
+    tokenHash,
+    now,
+  );
+  return db.prepare('SELECT * FROM extension_tokens WHERE id = ?').get(id) as ExtensionTokenRow;
+}
+
+export function listExtensionTokens(): ExtensionTokenRow[] {
+  return db.prepare('SELECT * FROM extension_tokens ORDER BY created_at DESC').all() as ExtensionTokenRow[];
+}
+
+export function getExtensionTokenByHash(tokenHash: string): ExtensionTokenRow | undefined {
+  return db
+    .prepare('SELECT * FROM extension_tokens WHERE token_hash = ? AND revoked_at IS NULL')
+    .get(tokenHash) as ExtensionTokenRow | undefined;
+}
+
+export function touchExtensionToken(id: string): void {
+  db.prepare('UPDATE extension_tokens SET last_used_at = ? WHERE id = ?').run(nowIso(), id);
+}
+
+export function revokeExtensionToken(id: string): void {
+  db.prepare('UPDATE extension_tokens SET revoked_at = ? WHERE id = ?').run(nowIso(), id);
+}

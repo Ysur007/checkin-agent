@@ -7,6 +7,7 @@ import {
   MIGRATION_4_SQL,
   MIGRATION_5_SQL,
   MIGRATION_6_SQL,
+  MIGRATION_7_SQL,
   MIGRATION_SQL,
   MIGRATION_VERSION,
 } from './migrations.js';
@@ -60,6 +61,10 @@ export function migrate(): void {
     if (current < 6) {
       db.exec(MIGRATION_6_SQL);
       markVersion(6, 'local-login-pairing');
+    }
+    if (current < 7) {
+      db.exec(MIGRATION_7_SQL);
+      markVersion(7, 'extension-tokens');
     }
   });
 

@@ -16,6 +16,11 @@ import {
   countClaimDays,
   countRunsForAccount,
   createAccount,
+  createExtensionToken,
+  getExtensionTokenByHash,
+  listExtensionTokens,
+  revokeExtensionToken,
+  touchExtensionToken,
   dailyStatsSince,
   deleteAccount,
   getAccount,
@@ -316,6 +321,8 @@ export async function createApp(deps: AppDeps) {
     if (pathname.startsWith('/api/health') || pathname.startsWith('/api/auth')) return;
     // 本机登录助手凭一次性配对码 / 短期令牌访问，不走控制台会话。
     if (pathname.startsWith('/api/pair')) return;
+    // 浏览器扩展凭长期令牌访问，令牌在路由内校验。
+    if (pathname.startsWith('/api/ext/')) return;
     await requireAuth(request, reply);
     if (reply.sent) return;
     await requireCsrf(request, reply);
@@ -711,6 +718,89 @@ export async function createApp(deps: AppDeps) {
     return reply
       .code(201)
       .send({ account: sanitizeAccount(account, localDate(getSchedule().timezone)) });
+  });
+
+  /* ---------- browser extension access ---------- */
+
+  const readExtToken = (request: { headers: Record<string, unknown> }) => {
+    const header = String(request.headers.authorization ?? '');
+    const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    if (!token) return null;
+    const row = getExtensionTokenByHash(sha256(token));
+    if (!row) return null;
+    touchExtensionToken(row.id);
+    return row;
+  };
+
+  app.get('/api/extension-tokens', async () => ({
+    items: listExtensionTokens().map((row) => ({
+      id: row.id,
+      label: row.label,
+      createdAt: row.created_at,
+      lastUsedAt: row.last_used_at,
+      revokedAt: row.revoked_at,
+    })),
+  }));
+
+  app.post('/api/extension-tokens', async (request, reply) => {
+    const body = request.body as { label?: string };
+    const label = String(body?.label ?? '').trim().slice(0, 40) || '浏览器扩展';
+    const token = crypto.randomBytes(32).toString('base64url');
+    const row = createExtensionToken(crypto.randomUUID(), label, sha256(token));
+    audit('admin', 'extension.token.create', row.id, { label });
+    return reply.code(201).send({ id: row.id, label: row.label, token, createdAt: row.created_at });
+  });
+
+  app.delete('/api/extension-tokens/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    revokeExtensionToken(id);
+    audit('admin', 'extension.token.revoke', id);
+    return reply.code(204).send();
+  });
+
+  app.get('/api/ext/accounts', async (request, reply) => {
+    if (!readExtToken(request)) {
+      return reply.code(401).send({ error: { code: 'EXT_TOKEN_INVALID', message: '扩展令牌无效或已吊销' } });
+    }
+    return {
+      accounts: listAccounts().map((account) => {
+        const provider = getProvider(account.plugin_id);
+        return {
+          id: account.id,
+          label: account.label,
+          providerId: account.plugin_id,
+          providerName: provider?.name ?? account.plugin_id,
+          loginUrl: account.login_url ?? provider?.loginUrl ?? null,
+          configured: Boolean(account.cookie_sealed),
+          verified: account.cookie_verified === 1,
+          updatedAt: account.cookie_updated_at,
+        };
+      }),
+    };
+  });
+
+  app.post('/api/ext/cookie', async (request, reply) => {
+    if (!readExtToken(request)) {
+      return reply.code(401).send({ error: { code: 'EXT_TOKEN_INVALID', message: '扩展令牌无效或已吊销' } });
+    }
+    const body = request.body as { accountId?: string; cookie?: string };
+    const accountId = String(body?.accountId ?? '');
+    if (!accountId) {
+      return reply.code(400).send({ error: { code: 'ACCOUNT_REQUIRED', message: '请选择要保存到的账号' } });
+    }
+    const account = getAccount(accountId);
+    if (!account) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '账号不存在' } });
+
+    const result = await applyAccountCookie(account, body?.cookie);
+    if (!result.ok) {
+      return reply.code(400).send({ error: { code: result.code, message: result.message } });
+    }
+    audit('extension', 'cookie.update', account.id, { source: 'browser-extension' });
+    return {
+      ok: true,
+      warning: result.warning,
+      account: sanitizeAccount(getAccount(account.id)!, localDate(getSchedule().timezone)),
+    };
   });
 
   /* ---------- check-in center ---------- */

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>保存登录</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #0a0a0b;
+        --ink-2: #52525b;
+        --ink-3: #8b8b93;
+        --line: #e4e4e7;
+        --surface: #ffffff;
+        --surface-2: #f7f7f8;
+        --ok: #15803d;
+        --bad: #b42318;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        width: 320px;
+        margin: 0;
+        padding: 14px;
+        font: 12px/1.55 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: var(--ink);
+        background: var(--surface);
+      }
+      h1 {
+        margin: 0 0 2px;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .sub {
+        margin: 0 0 12px;
+        font-size: 10.5px;
+        color: var(--ink-3);
+      }
+      label {
+        display: block;
+        margin-bottom: 8px;
+      }
+      label span {
+        display: block;
+        margin-bottom: 3px;
+        font-size: 10px;
+        color: var(--ink-3);
+      }
+      input,
+      select {
+        width: 100%;
+        height: 30px;
+        padding: 0 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+        font: inherit;
+        font-size: 11.5px;
+        color: var(--ink);
+        outline: none;
+      }
+      input:focus,
+      select:focus {
+        border-color: var(--ink-3);
+      }
+      button {
+        width: 100%;
+        height: 34px;
+        border: 1px solid var(--ink);
+        border-radius: 7px;
+        background: var(--ink);
+        color: #fff;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled {
+        background: var(--surface-2);
+        border-color: var(--line);
+        color: var(--ink-3);
+        cursor: not-allowed;
+      }
+      button.ghost {
+        height: 28px;
+        background: var(--surface);
+        color: var(--ink-2);
+        border-color: var(--line);
+        font-weight: 500;
+      }
+      .row {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .hint {
+        margin: 8px 0 0;
+        font-size: 10px;
+        line-height: 1.5;
+        color: var(--ink-3);
+      }
+      .status {
+        margin-top: 10px;
+        padding: 8px 10px;
+        border-radius: 7px;
+        border: 1px solid var(--line);
+        background: var(--surface-2);
+        font-size: 10.5px;
+        line-height: 1.55;
+        display: none;
+        word-break: break-word;
+      }
+      .status.is-ok {
+        display: block;
+        color: var(--ok);
+        border-color: #bbf7d0;
+        background: #f0fdf4;
+      }
+      .status.is-bad {
+        display: block;
+        color: var(--bad);
+        border-color: #fecaca;
+        background: #fef2f2;
+      }
+      .status.is-busy {
+        display: block;
+        color: var(--ink-2);
+      }
+      .hidden {
+        display: none !important;
+      }
+      .site {
+        margin: 0 0 10px;
+        padding: 6px 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface-2);
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 9.5px;
+        color: var(--ink-2);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>保存登录到签到执行台</h1>
+    <p class="sub">读取当前标签的 Cookie，直接送到你部署的服务端。</p>
+
+    <div id="setup" class="hidden">
+      <label>
+        <span>控制台地址</span>
+        <input id="host" placeholder="http://192.168.31.143:8787" autocomplete="off" />
+      </label>
+      <label>
+        <span>扩展令牌（在控制台「设置 → 浏览器扩展」生成）</span>
+        <input id="token" type="password" placeholder="粘贴以 ext_ 开头的令牌" autocomplete="off" />
+      </label>
+      <button id="save-config">保存并连接</button>
+      <p class="hint">令牌只存在这台浏览器的本地存储里，可以随时在控制台吊销。</p>
+    </div>
+
+    <div id="main" class="hidden">
+      <p class="site" id="site"></p>
+      <label>
+        <span>保存到哪个账号</span>
+        <select id="account"></select>
+      </label>
+      <button id="capture">读取当前站点 Cookie 并保存</button>
+      <div class="row">
+        <button class="ghost" id="reload">刷新账号</button>
+        <button class="ghost" id="reset">重新配置</button>
+      </div>
+      <p class="hint" id="hint"></p>
+    </div>
+
+    <div class="status" id="status"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

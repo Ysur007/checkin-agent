@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { SettingsData } from '../types';
-import { get, patch, post } from '../api';
+import { del, get, patch, post } from '../api';
 import type { ToastTone } from '../components/Toast';
 import { IconClock, IconDatabase, IconKey, IconShield } from '../components/icons';
 
@@ -23,6 +23,11 @@ export function Settings({ notify }: Props) {
   const [confirm, setConfirm] = useState('');
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [probing, setProbing] = useState(false);
+  const [tokens, setTokens] = useState<
+    Array<{ id: string; label: string; createdAt: string; lastUsedAt: string | null; revokedAt: string | null }>
+  >([]);
+  const [freshToken, setFreshToken] = useState('');
+  const [tokenBusy, setTokenBusy] = useState(false);
 
   useEffect(() => {
     get<SettingsData>('/api/settings')
@@ -37,6 +42,46 @@ export function Settings({ notify }: Props) {
       })
       .catch((error: unknown) => notify(error instanceof Error ? error.message : '加载设置失败', 'error'));
   }, [notify]);
+
+  const loadTokens = useCallback(async () => {
+    try {
+      const result = await get<{ items: typeof tokens }>('/api/extension-tokens');
+      setTokens(result.items);
+    } catch {
+      /* 令牌列表失败不影响其它设置 */
+    }
+  }, [tokens]);
+
+  useEffect(() => {
+    void loadTokens();
+  }, [loadTokens]);
+
+  const createToken = async () => {
+    setTokenBusy(true);
+    try {
+      const result = await post<{ token: string; label: string }>('/api/extension-tokens', { label: '浏览器扩展' });
+      setFreshToken(result.token);
+      await loadTokens();
+      notify('已生成扩展令牌，只显示这一次', 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '生成失败', 'error');
+    } finally {
+      setTokenBusy(false);
+    }
+  };
+
+  const revokeToken = async (id: string) => {
+    setTokenBusy(true);
+    try {
+      await del(`/api/extension-tokens/${id}`);
+      await loadTokens();
+      notify('令牌已吊销', 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '吊销失败', 'error');
+    } finally {
+      setTokenBusy(false);
+    }
+  };
 
   const save = async () => {
     setBusy(true);
@@ -214,6 +259,77 @@ export function Settings({ notify }: Props) {
             {probing ? '探测中…' : '立即探测'}
           </button>
         </div>
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <div>
+            <h3>浏览器扩展</h3>
+            <p>装一次扩展，之后在平台页面点一下图标就能把 Cookie 发过来，不用再手动复制。</p>
+          </div>
+          <a className="btn btn-ghost btn-sm" href="/checkin-agent-extension.zip" download>
+            下载扩展
+          </a>
+        </div>
+
+        <ol className="login-steps">
+          <li>下载并解压上面的 zip。</li>
+          <li>
+            打开 <code>chrome://extensions</code>（Edge 是 <code>edge://extensions</code>），打开「开发者模式」。
+          </li>
+          <li>点「加载已解压的扩展程序」，选解压出来的目录。</li>
+          <li>在下面生成令牌，粘贴到扩展弹窗里，填上本控制台地址。</li>
+          <li>去平台登录，登录完点扩展图标 →「读取当前站点 Cookie 并保存」。</li>
+        </ol>
+
+        {freshToken && (
+          <div className="token-once">
+            <span>新令牌（只显示这一次）</span>
+            <code>{freshToken}</code>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                void navigator.clipboard.writeText(freshToken);
+                notify('已复制', 'success');
+              }}
+            >
+              复制
+            </button>
+          </div>
+        )}
+
+        {tokens.length > 0 && (
+          <div className="token-list">
+            {tokens.map((item) => (
+              <div className="token-row" key={item.id}>
+                <strong>{item.label}</strong>
+                <span className="muted small">
+                  {item.lastUsedAt ? `最近使用 ${new Date(item.lastUsedAt).toLocaleString('zh-CN')}` : '还没用过'}
+                </span>
+                <span className={`pill pill-${item.revokedAt ? 'bad' : 'ok'}`}>
+                  <i />
+                  {item.revokedAt ? '已吊销' : '有效'}
+                </span>
+                {!item.revokedAt && (
+                  <button type="button" className="link-btn" onClick={() => void revokeToken(item.id)} disabled={tokenBusy}>
+                    吊销
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="row-actions">
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => void createToken()} disabled={tokenBusy}>
+            {tokenBusy ? '处理中…' : '生成扩展令牌'}
+          </button>
+        </div>
+
+        <p className="security-note">
+          扩展只读取当前标签所属站点的 Cookie，只发到你填写的这个地址；令牌保存在浏览器本地存储，随时可以在这里吊销。
+        </p>
       </section>
 
       <section className="card">
