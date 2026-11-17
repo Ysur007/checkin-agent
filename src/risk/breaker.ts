@@ -226,6 +226,7 @@ export interface RiskPlatformView {
   challenges24h: number;
   challengeRate: number;
   accountCount: number;
+  checkIn: boolean;
   policy: ReturnType<typeof getAutomationPolicy>;
   policyAcknowledged: boolean;
 }
@@ -264,6 +265,7 @@ export function getRiskOverview(now = Date.now()) {
       challenges24h: challenges,
       challengeRate: runs > 0 ? Math.min(100, Math.round((challenges / runs) * 100)) : 0,
       accountCount: counts.get(platformId) ?? 0,
+      checkIn: Boolean(getLoadedPlugin(platformId)?.adapter),
       policy: getAutomationPolicy(platformId),
       policyAcknowledged: Boolean(getPolicyAck(platformId)),
     });

@@ -6,6 +6,7 @@ import type { ClaimRunner } from '../src/runner/claimRunner.js';
 
 let repo: typeof import('../src/db/repo.js');
 let scheduler: typeof import('../src/scheduler/scheduler.js');
+let loader: typeof import('../src/plugins/loader.js');
 let db: typeof import('../src/db/index.js').db;
 let dir: string;
 
@@ -15,6 +16,8 @@ beforeAll(async () => {
   const database = await import('../src/db/index.js');
   db = database.db;
   repo = await import('../src/db/repo.js');
+  loader = await import('../src/plugins/loader.js');
+  loader.loadBuiltinPlugins();
   scheduler = await import('../src/scheduler/scheduler.js');
 });
 
@@ -57,8 +60,12 @@ describe('risk-aware scheduler', () => {
       windowEnd: '23:59',
     });
 
-    const account = repo.createAccount({ pluginId: 'demo', label: 'sched', authSource: 'manual' });
-    repo.updateAccountCookie(account.id, 'v1.test', 'fp', 10, ['demo_session'], null);
+    repo.setPolicyAck('breezeblue');
+    const account = repo.createAccount({ pluginId: 'breezeblue', label: 'sched', authSource: 'manual' });
+    repo.updateAccountCookie(account.id, 'v1.test', 'fp', 10, ['breeze_blue_session'], null, {
+      verified: true,
+      checkedAt: new Date().toISOString(),
+    });
 
     const starts: string[] = [];
     const runner = {
@@ -87,7 +94,7 @@ describe('risk-aware scheduler', () => {
       repo.insertRun({
         id: `cap-${index}`,
         accountId: `other-${index}`,
-        pluginId: 'demo',
+        pluginId: 'breezeblue',
         pluginVersion: '1',
         trigger: 'schedule',
         localDate: clock.date,

@@ -11,6 +11,7 @@ import {
   platformHasActiveLock,
 } from '../db/repo.js';
 import { accountHealth, isCookieExpired } from '../accounts/health.js';
+import { getLoadedPlugin } from '../plugins/loader.js';
 import { getAutomationPolicy } from '../providers/policy.js';
 import { checkPlatform } from '../risk/breaker.js';
 import { hashJitter, localParts, minutesOfDay } from '../lib/time.js';
@@ -37,6 +38,7 @@ export async function tick(runner: ClaimRunner, now = new Date()): Promise<void>
     .filter((account) => {
       if (!account.enabled || account.status === 'needs_reauth' || account.status === 'disabled') return false;
       if (!account.cookie_sealed) return false;
+      if (!getLoadedPlugin(account.plugin_id)) return false;
       if (hasSuccessOn(account.id, parts.date)) return false;
       if (getClaimDay(account.id, parts.date)) return false;
       if (hasScheduledRunOn(account.id, parts.date)) return false;

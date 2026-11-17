@@ -16,6 +16,7 @@ export function RiskBar({ risk, busy, onPause, onReset, onAck, onEvents }: Props
   const policyPending = risk.platforms.find(
     (platform) =>
       platform.policy.automation === 'unknown' &&
+      platform.checkIn &&
       !platform.policyAcknowledged &&
       (platform.accountCount > 0 || platform.runs24h > 0),
   );

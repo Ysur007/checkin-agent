@@ -286,6 +286,7 @@ export interface RiskPlatform {
   challenges24h: number;
   challengeRate: number;
   accountCount: number;
+  checkIn: boolean;
   policy: AutomationPolicy;
   policyAcknowledged: boolean;
 }
