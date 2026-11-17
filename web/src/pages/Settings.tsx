@@ -1,0 +1,246 @@
+import { useEffect, useState } from 'react';
+import type { SettingsData } from '../types';
+import { get, patch, post } from '../api';
+import type { ToastTone } from '../components/Toast';
+import { IconClock, IconDatabase, IconKey, IconShield } from '../components/icons';
+
+interface Props {
+  notify: (message: string, tone?: ToastTone) => void;
+}
+
+export function Settings({ notify }: Props) {
+  const [data, setData] = useState<SettingsData | null>(null);
+  const [time, setTime] = useState('08:10');
+  const [timezone, setTimezone] = useState('Asia/Shanghai');
+  const [jitter, setJitter] = useState('240');
+  const [windowStart, setWindowStart] = useState('08:00');
+  const [windowEnd, setWindowEnd] = useState('23:59');
+  const [busy, setBusy] = useState(false);
+  const [backup, setBackup] = useState('');
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
+
+  useEffect(() => {
+    get<SettingsData>('/api/settings')
+      .then((settings) => {
+        setData(settings);
+        setTime(settings.schedule.time);
+        setTimezone(settings.schedule.timezone);
+        setJitter(String(settings.schedule.jitterSeconds));
+        setWindowStart(settings.schedule.windowStart);
+        setWindowEnd(settings.schedule.windowEnd);
+      })
+      .catch((error: unknown) => notify(error instanceof Error ? error.message : '加载设置失败', 'error'));
+  }, [notify]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const result = await patch<SettingsData['schedule']>('/api/settings', {
+        schedule: {
+          time,
+          timezone,
+          jitterSeconds: Number(jitter),
+          windowStart,
+          windowEnd,
+        },
+      });
+      notify(`调度已保存：${result.time} ${result.timezone}`, 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '保存失败', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runBackup = async () => {
+    setBusy(true);
+    try {
+      const result = await post<{ file: string }>('/api/admin/backup');
+      setBackup(result.file);
+      notify(`备份完成：${result.file}`, 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '备份失败', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changePassword = async () => {
+    if (next.length < 8) {
+      notify('新密码至少 8 位', 'error');
+      return;
+    }
+    if (next !== confirm) {
+      notify('两次输入的新密码不一致', 'error');
+      return;
+    }
+    setPasswordBusy(true);
+    try {
+      await post('/api/auth/password', { current, next });
+      setCurrent('');
+      setNext('');
+      setConfirm('');
+      notify('管理员密码已更新', 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '修改失败', 'error');
+    } finally {
+      setPasswordBusy(false);
+    }
+  };
+
+  if (!data) return <div className="card empty-card">加载设置…</div>;
+
+  return (
+    <div className="page settings-page">
+      <section className="card">
+        <div className="card-head">
+          <div>
+            <h3>每日调度</h3>
+            <p>北京时间 08:00 重置；默认 08:10 执行，另加账号级确定性抖动。</p>
+          </div>
+          <IconClock size={18} />
+        </div>
+
+        <div className="settings-grid">
+          <label className="field">
+            <span className="field-label">执行时间</span>
+            <input type="text" inputMode="numeric" maxLength={5} placeholder="08:10" value={time} onChange={(event) => setTime(event.target.value)} />
+          </label>
+          <label className="field">
+            <span className="field-label">时区</span>
+            <input value={timezone} onChange={(event) => setTimezone(event.target.value)} />
+          </label>
+          <label className="field">
+            <span className="field-label">抖动上限（秒）</span>
+            <input type="number" min="0" max="3600" value={jitter} onChange={(event) => setJitter(event.target.value)} />
+          </label>
+          <label className="field">
+            <span className="field-label">补跑窗口开始</span>
+            <input type="text" inputMode="numeric" maxLength={5} placeholder="08:00" value={windowStart} onChange={(event) => setWindowStart(event.target.value)} />
+          </label>
+          <label className="field">
+            <span className="field-label">补跑窗口结束</span>
+            <input type="text" inputMode="numeric" maxLength={5} placeholder="23:59" value={windowEnd} onChange={(event) => setWindowEnd(event.target.value)} />
+          </label>
+        </div>
+
+        <div className="settings-actions">
+          <button type="button" className="btn btn-primary" onClick={save} disabled={busy}>
+            保存调度
+          </button>
+          <span className="muted">服务每分钟检查一次；重启或 NAS 唤醒后会按窗口补跑。</span>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <div>
+            <h3>登录浏览器</h3>
+            <p>账号登录与 Cookie 自动捕获由服务端的 Chromium 完成；没有浏览器组件时仍可手动录入 Cookie。</p>
+          </div>
+          <span className={`pill pill-${data.browser.enabled && data.browser.available ? 'ok' : 'warn'}`}>
+            <i />
+            {data.browser.enabled && data.browser.available ? '可用' : data.browser.enabled ? '未安装' : '已关闭'}
+          </span>
+        </div>
+        <div className="settings-grid">
+          <div className="field">
+            <span className="field-label">浏览器</span>
+            <span className="setting-value">{data.browser.available ? data.browser.executable : '未检测到 Chromium'}</span>
+          </div>
+          <div className="field">
+            <span className="field-label">会话时长</span>
+            <span className="setting-value">{data.browser.sessionMinutes} 分钟</span>
+          </div>
+          <div className="field">
+            <span className="field-label">内网地址</span>
+            <span className="setting-value">{data.browser.allowPrivate ? '允许（仅建议测试）' : '已阻止'}</span>
+          </div>
+        </div>
+        <p className="security-note">
+          浏览器配置目录位于 <code>/data/profiles</code>，与数据库一样重要：它能让多数平台在 Cookie 失效后免密恢复登录。
+          备份或迁移时请连同 <code>app.key</code> 一起加密保存。
+        </p>
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <div>
+            <h3>密钥与备份</h3>
+            <p>Cookie 使用 AES-256-GCM 加密；数据库和 app.key 必须一起备份。</p>
+          </div>
+          <IconKey size={18} />
+        </div>
+
+        <dl className="info-list">
+          <div>
+            <dt>版本</dt>
+            <dd className="mono">v{data.version}</dd>
+          </div>
+          <div>
+            <dt>APP_KEY 指纹</dt>
+            <dd className="mono">{data.keyFingerprint}</dd>
+          </div>
+          <div>
+            <dt>Cookie 传输</dt>
+            <dd>{data.cookieSecure ? 'HTTPS / Secure' : 'HTTP（仅建议内网）'}</dd>
+          </div>
+        </dl>
+
+        <div className="settings-actions">
+          <button type="button" className="btn btn-ghost" onClick={runBackup} disabled={busy}>
+            <IconDatabase size={14} />
+            立即备份
+          </button>
+          {backup && <span className="mono muted">{backup}</span>}
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <div>
+            <h3>管理员密码</h3>
+            <p>修改后当前会话继续有效；其他设备需要重新登录。</p>
+          </div>
+          <IconShield size={18} />
+        </div>
+
+        <div className="settings-grid settings-grid-password">
+          <label className="field">
+            <span className="field-label">当前密码</span>
+            <input type="password" value={current} onChange={(event) => setCurrent(event.target.value)} autoComplete="current-password" />
+          </label>
+          <label className="field">
+            <span className="field-label">新密码</span>
+            <input type="password" value={next} onChange={(event) => setNext(event.target.value)} autoComplete="new-password" />
+          </label>
+          <label className="field">
+            <span className="field-label">确认新密码</span>
+            <input type="password" value={confirm} onChange={(event) => setConfirm(event.target.value)} autoComplete="new-password" />
+          </label>
+        </div>
+
+        <div className="settings-actions">
+          <button type="button" className="btn btn-primary" onClick={changePassword} disabled={passwordBusy}>
+            {passwordBusy ? '保存中…' : '修改密码'}
+          </button>
+          {data.envPassword && <span className="muted">首次密码来自 ADMIN_PASSWORD 环境变量。</span>}
+        </div>
+      </section>
+
+      <div className="notice notice-neutral">
+        <IconShield size={16} />
+        <div>
+          <strong>部署提醒</strong>
+          <p>
+            /data 必须放在本地卷，不要放 SMB/NFS（SQLite WAL 会损坏）。建议用 Caddy/Nginx 反代 HTTPS，并把
+            COOKIE_SECURE 设为 1；不要把 8787 直接暴露到公网。
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,34 @@
+services:
+  checkin-agent:
+    build: .
+    image: checkin-agent:0.2.0
+    container_name: checkin-agent
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      TZ: Asia/Shanghai
+      PORT: "8787"
+      DATA_DIR: /data
+      LOG_LEVEL: info
+      # APP_KEY: ""              # 32-byte base64; leave empty to generate /data/app.key
+      # ADMIN_PASSWORD: ""       # first-run password; leave empty to set it in the console
+      COOKIE_SECURE: "0"         # set to 1 when served over HTTPS
+      BROWSER_LOGIN: "1"         # set to 0 to disable the server-side login browser
+      LOGIN_ALLOW_PRIVATE: "0"   # keep 0 unless you really need to log in to an intranet page
+      PLAYWRIGHT_CHROMIUM_PATH: /usr/bin/chromium
+    volumes:
+      - ./data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/api/health/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

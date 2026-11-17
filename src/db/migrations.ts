@@ -1,0 +1,177 @@
+export const MIGRATION_SQL = `
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  applied_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS plugins (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  version TEXT NOT NULL,
+  source TEXT NOT NULL,
+  manifest TEXT NOT NULL,
+  adapter TEXT NOT NULL,
+  checksum TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  installed_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS accounts (
+  id TEXT PRIMARY KEY,
+  plugin_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  cookie_sealed TEXT,
+  cookie_fp TEXT,
+  cookie_len INTEGER,
+  cookie_keys TEXT,
+  cookie_updated_at TEXT,
+  cookie_expires_at TEXT,
+  cookie_checked_at TEXT,
+  cookie_verified INTEGER NOT NULL DEFAULT 0,
+  auth_source TEXT NOT NULL DEFAULT 'manual',
+  login_url TEXT,
+  expires_hint TEXT,
+  status TEXT NOT NULL DEFAULT 'unconfigured',
+  schedule_time TEXT,
+  lock_token TEXT,
+  lock_expires_at INTEGER,
+  last_ok_at TEXT,
+  last_run_at TEXT,
+  last_error_code TEXT,
+  fail_streak INTEGER NOT NULL DEFAULT 0,
+  last_balance REAL,
+  last_claimed_today INTEGER,
+  last_available INTEGER,
+  last_amount REAL,
+  last_reset_at TEXT,
+  last_summary_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS runs (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  plugin_id TEXT NOT NULL,
+  plugin_version TEXT NOT NULL,
+  trigger TEXT NOT NULL,
+  local_date TEXT NOT NULL,
+  idem_key TEXT NOT NULL,
+  status TEXT NOT NULL,
+  attempt INTEGER NOT NULL DEFAULT 1,
+  error_code TEXT,
+  error_message TEXT,
+  http_status INTEGER,
+  pre_balance REAL,
+  post_balance REAL,
+  credits_issued REAL,
+  claimed_flag INTEGER,
+  latency_ms INTEGER,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  evidence TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_runs_idem ON runs(idem_key);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_runs_sched ON runs(account_id, local_date)
+  WHERE trigger IN ('schedule', 'backfill');
+CREATE INDEX IF NOT EXISTS ix_runs_account_time ON runs(account_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS ix_runs_status_time ON runs(status, started_at DESC);
+CREATE INDEX IF NOT EXISTS ix_runs_date ON runs(local_date);
+
+CREATE TABLE IF NOT EXISTS run_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  at TEXT NOT NULL,
+  type TEXT NOT NULL,
+  detail TEXT NOT NULL,
+  UNIQUE(run_id, seq)
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  csrf_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  ip TEXT,
+  user_agent TEXT
+);
+
+CREATE INDEX IF NOT EXISTS ix_sessions_exp ON sessions(expires_at);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT,
+  meta TEXT
+);
+
+CREATE INDEX IF NOT EXISTS ix_audit_at ON audit_log(at DESC);
+`;
+
+/**
+ * v2：账号登录会话、签到账本。
+ * 账本 (account_id, local_date) 是主键，重复签到在数据库层就不可能写入成功。
+ */
+export const MIGRATION_2_SQL = `
+CREATE TABLE IF NOT EXISTS login_sessions (
+  id TEXT PRIMARY KEY,
+  provider_id TEXT NOT NULL,
+  account_id TEXT,
+  owner_session TEXT NOT NULL,
+  label TEXT NOT NULL,
+  login_url TEXT NOT NULL,
+  status TEXT NOT NULL,
+  current_url TEXT,
+  page_title TEXT,
+  last_error TEXT,
+  detected_cookies TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  closed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS ix_login_sessions_owner ON login_sessions(owner_session, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_login_sessions_status ON login_sessions(status);
+
+CREATE TABLE IF NOT EXISTS claim_days (
+  account_id TEXT NOT NULL,
+  local_date TEXT NOT NULL,
+  run_id TEXT,
+  status TEXT NOT NULL,
+  credits REAL,
+  http_status INTEGER,
+  verified INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (account_id, local_date)
+);
+
+CREATE INDEX IF NOT EXISTS ix_claim_days_date ON claim_days(local_date DESC);
+`;
+
+export const MIGRATION_VERSION = 2;
+
+/** 旧库升级时需要补的列；新库已包含在 MIGRATION_SQL 里。 */
+export const ACCOUNT_COLUMNS_V2: Array<{ name: string; ddl: string }> = [
+  { name: 'cookie_expires_at', ddl: 'ALTER TABLE accounts ADD COLUMN cookie_expires_at TEXT' },
+  { name: 'cookie_checked_at', ddl: 'ALTER TABLE accounts ADD COLUMN cookie_checked_at TEXT' },
+  { name: 'cookie_verified', ddl: 'ALTER TABLE accounts ADD COLUMN cookie_verified INTEGER NOT NULL DEFAULT 0' },
+  { name: 'auth_source', ddl: "ALTER TABLE accounts ADD COLUMN auth_source TEXT NOT NULL DEFAULT 'manual'" },
+  { name: 'login_url', ddl: 'ALTER TABLE accounts ADD COLUMN login_url TEXT' },
+];

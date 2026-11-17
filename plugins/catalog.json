@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "id": "breezeblue",
+      "name": "BreezeBlue",
+      "version": "1.0.0",
+      "description": "每日领取 400 免费积分，领取后用 summary 复核余额。",
+      "source": "builtin",
+      "permissions": ["https://breezeblue.ai"],
+      "status": "installed"
+    },
+    {
+      "id": "coming-soon",
+      "name": "待适配平台",
+      "version": "—",
+      "description": "按同一份 manifest + adapter 契约接入；首版不执行第三方代码，也不提供远程安装。",
+      "source": "discover",
+      "permissions": [],
+      "status": "discover"
+    }
+  ]
+}

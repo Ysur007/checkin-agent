@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "demo",
+  "name": "演示平台",
+  "version": "1.0.0",
+  "author": "test-fixture",
+  "description": "本地联调用的演示平台，不连接任何真实服务",
+  "license": "MIT",
+  "auth": {
+    "type": "cookie",
+    "primaryCookie": "demo_session",
+    "hintUrl": "https://127.0.0.1:9443/login"
+  },
+  "permissions": {
+    "network": ["https://127.0.0.1:9443"],
+    "hooks": false
+  },
+  "schedule": {
+    "timezone": "Asia/Shanghai",
+    "defaultTime": "08:10",
+    "jitterSeconds": 0,
+    "windowStart": "00:00",
+    "windowEnd": "23:59"
+  },
+  "limits": {
+    "timeoutMs": 15000,
+    "maxAttempts": 2
+  }
+}

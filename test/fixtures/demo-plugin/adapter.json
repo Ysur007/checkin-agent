@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "baseUrl": "https://127.0.0.1:9443",
+  "defaultHeaders": {
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "accept": "application/json",
+    "content-type": "application/json",
+    "origin": "https://127.0.0.1:9443",
+    "referer": "https://127.0.0.1:9443/app"
+  },
+  "requests": {
+    "summary": { "method": "GET", "path": "/api/summary" },
+    "claim": { "method": "POST", "path": "/api/checkin", "body": {} }
+  },
+  "extract": {
+    "summary": {
+      "balance": "$.balance",
+      "claimedToday": "$.checked_today",
+      "available": "$.available",
+      "amount": "$.amount",
+      "resetAt": "$.next_reset_at"
+    },
+    "claim": {
+      "claimed": "$.claimed",
+      "creditsIssued": "$.credits_issued",
+      "balance": "$.balance",
+      "code": "$.code"
+    }
+  },
+  "rules": {
+    "preflight": [
+      { "source": "summary", "field": "claimedToday", "op": "eq", "value": true, "result": "ALREADY_CLAIMED" },
+      { "source": "summary", "field": "available", "op": "eq", "value": false, "result": "NOT_AVAILABLE" }
+    ],
+    "claim": [
+      { "source": "claim", "field": "claimed", "op": "eq", "value": true, "result": "CLAIMED" },
+      { "source": "claim", "field": "claimed", "op": "eq", "value": false, "result": "CLAIM_REJECTED" }
+    ],
+    "verify": [
+      { "source": "verify", "field": "claimedToday", "op": "eq", "value": true, "result": "VERIFIED" },
+      { "source": "verify", "field": "claimedToday", "op": "eq", "value": false, "result": "VERIFY_MISMATCH" }
+    ]
+  },
+  "errors": [
+    { "bodyCode": "AUTH_REQUIRED", "error": "AUTH_REQUIRED" },
+    { "status": [401], "error": "AUTH_REQUIRED" },
+    { "status": [429], "error": "RATE_LIMITED" },
+    { "statusMin": 500, "error": "HTTP_5XX", "retry": true }
+  ],
+  "retry": { "maxAttempts": 2, "backoffMs": [400] }
+}

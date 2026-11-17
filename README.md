@@ -1,0 +1,154 @@
+# checkin-agent
+
+本地优先的签到执行台：在服务端浏览器里登录账号，自动捕获并加密保存 Cookie，按平台执行真实签到请求，再把结果写进可追溯的账本。
+
+当前适配情况：
+
+- **BreezeBlue**：完整签到适配器。真实调用 `GET /api/credits/summary`、`POST /api/credits/daily-claim`，领取后再次读取 summary + 余额复核。
+- **其它平台**：只接入「登录 / Cookie 采集 / 失效重登 / 定时调度」。没有 adapter 的平台会明确显示「待适配」，不会伪造签到成功。
+- **自定义平台**：填写任意登录页地址即可采集该域 Cookie；需要签到时按 `plugins/` 规范补一个 JSON adapter。
+
+## 它解决什么
+
+| 能力 | 实现 |
+|---|---|
+| 账号登录 | 服务端 Chromium 打开登录页，控制台实时显示画面；可点击、输入、滚动，验证码/2FA 由你自己完成 |
+| Cookie 自动获取 | 检测到登录成功后自动按平台域名范围提取 Cookie，`AES-256-GCM` 加密写库；接口只返回字段名、长度与指纹 |
+| 登录态维护 | 记录 Cookie 过期时间；启动/每 30 分钟巡检，过期立即标记 `needs_reauth`；有适配器的账号每 6 小时调一次只读 summary |
+| 重新获取 | 每个账号保留独立的浏览器配置目录，重登时多数平台可免密恢复；失效账号在签到中心和账号页都有「重新登录」 |
+| 签到执行 | 手动单个 / 全部签到 / 定时签到，串行执行、失败重试有上限 |
+| 防重复签到 | `claim_days(account_id, local_date)` 主键账本；执行前查账本，成功后写入，数据库层也不可能重复 |
+| 结果记录 | 每次运行记录 HTTP 状态、耗时、字节数、requestId、领取前后余额与复核结果；签到记录按天聚合 |
+| 安全 | 单管理员 + CSRF + 登录限流；登录窗口绑定当前管理员会话；Cookie 加密、日志脱敏、审计日志 |
+
+## 快速开始
+
+```bash
+cp .env.example .env
+# 编辑 .env：设置 ADMIN_PASSWORD（至少 8 位），或留空首次打开时设置
+docker compose up -d --build
+```
+
+打开 `http://<NAS-IP>:8787`。首次进入设置管理密码，然后：
+
+1. 签到中心 → 添加账号 → 选择平台（或「自定义」）；
+2. 确认登录页地址 → 打开登录窗口；
+3. 在窗口里完成登录；状态变成「已检测到登录」后会自动校验并加密保存（失败时会保留窗口，可手动点「提取 Cookie」）；
+4. 回到签到中心，展开平台即可单独签到，或点「立即全部签到」。
+
+> 登录窗口是服务端浏览器，不是本地浏览器。账号密码只输入到平台页面里，服务不读取、不保存密码。
+
+## 支持的平台
+
+| 平台 | 登录采集 | 签到 |
+|---|---|---|
+| BreezeBlue | ✅ | ✅ 真实接口 + 复核 |
+| WorkBuddy / Qoder / Trae / Cline / Kiro / Cursor / 智谱清言 / CodeArts | ✅ | 待适配 |
+| ZCode / KukuAI / MonkeyCode / Accio / CatPaw | ✅（需填写登录页） | 待适配 |
+| 自定义平台 | ✅ | 需自备 adapter |
+
+平台清单位于 `src/providers/catalog.ts`。`loginUrl: null` 的平台在添加账号时必须填写实际登录页；登录页地址在登录前还可以修改。
+
+## 登录与 Cookie 生命周期
+
+```
+创建账号（status=unconfigured）
+  → 启动独立浏览器配置 /data/profiles/<accountId>
+  → 打开登录页，实时截图 + 转发点击/输入
+  → 检测到平台 Cookie（有 primaryCookie 时要求它存在）
+  → 提取该域及子域 Cookie → 调 summary 只读校验
+      ├─ 401/403/挑战 → 不保存，继续留在登录窗口
+      └─ 通过 → AES-256-GCM 加密写库，记录过期时间
+  → 关闭浏览器
+
+定时/巡检
+  → cookie_expires_at 已过 → needs_reauth（不发请求）
+  → 有 adapter 且 6 小时未校验 → 调 summary
+      ├─ 401/403 → needs_reauth
+      └─ 其它错误 → 保留原状态，记录错误码
+
+重新登录
+  → 复用 /data/profiles/<accountId>
+  → 平台仍记得登录 → 直接 ready，提取新 Cookie
+  → 平台要求重新认证 → 你在窗口里完成，再提取
+```
+
+## 防重复签到
+
+`claim_days` 以 `(account_id, local_date)` 为主键。三层拦截：
+
+1. 手动单个签到：先查账本，已存在直接返回 `409 ALREADY_CHECKED_IN`；
+2. 批量签到：跳过已签、未登录、登录失效、待适配的账号，并返回跳过原因；
+3. 定时任务：账本 + 当天定时运行记录双重跳过，进程重启也不会重复。
+
+只有 `succeeded` 或平台明确返回「今天已领」的 `already_claimed` 才写入账本；`unverified`、`failed`、`needs_reauth` 不写，允许修复后重试。
+
+## 安全模型
+
+- **单管理员**：`scrypt` 密码哈希、HttpOnly 会话 Cookie、CSRF 双提交、登录 5 次/5 分钟限流。
+- **登录窗口归属**：每个 `login_session` 绑定创建它的管理员会话，其他会话既不能看画面也不能操作；最多同时 3 个窗口，12 分钟超时。
+- **Cookie 作用域**：只提取登录页所在域及其子域，且必须匹配平台声明的 `cookieDomains`；不会把浏览器里其它站点 Cookie 一起带走。
+- **加密**：AES-256-GCM，AAD 绑定账号 ID；密钥 `/data/app.key` 权限 0600。数据库里没有明文 Cookie。
+- **不回显**：账号接口只返回字段名、长度、指纹、过期时间；运行事件与日志经过脱敏，`cookie` / `authorization` / `token` / `password` 一律替换为 `***`。
+- **浏览器配置**：`/data/profiles/<accountId>` 内含平台登录态，权限 0700，敏感程度等同 `app.key`。
+- **审计**：登录、重登、Cookie 捕获/更新、签到、删除、调度修改、备份都会写入 `audit_log`。
+- **URL 防护**：登录页只允许 https；拒绝 `127.0.0.1`、`10.*`、`192.168.*`、`172.16-31.*` 等内网地址（`LOGIN_ALLOW_PRIVATE=1` 仅用于本地联调）。
+- **失败处理**：浏览器启动失败、解密失败、平台 401、限流、5xx、超时都有独立错误码；不会把失败写成功。
+
+## 数据与备份
+
+- SQLite：`/data/checkin.db`（WAL）
+- 密钥：`/data/app.key`（0600）
+- 浏览器配置：`/data/profiles/`（0700）
+- 备份：设置 → 立即备份，产物在 `/data/backups/`；也可以直接备份整个 `/data`
+- **`checkin.db` + `app.key` + `profiles/` 必须一起备份**，否则 Cookie 无法解密，重登也需要重新输入密码
+- `/data` 必须是本地卷，不要放 SMB/NFS（SQLite WAL 会损坏）
+
+## Docker / NAS
+
+镜像内置 Debian Chromium 与中文字体；`docker-compose.yml` 以只读根文件系统运行，`/tmp` 和 `/dev/shm` 使用 tmpfs。
+
+- 群晖：Container Manager → 项目 → 粘贴 compose；数据目录用 `/volume1/docker/checkin-agent/data`；UID 不是 1000 时加 `user: "<uid>:<gid>"`
+- 威联通：Container Station → 应用程序；确认 `TZ=Asia/Shanghai`
+- 反代并启用 HTTPS 后设置 `COOKIE_SECURE=1`；不要把 8787 直接暴露公网
+- 不需要浏览器登录时可设 `BROWSER_LOGIN=0`，此时只能手动录入 Cookie
+- 多架构：`docker buildx build --platform linux/amd64,linux/arm64 -t <registry>/checkin-agent:0.2.0 --push .`
+
+首次启动如果出现 `SQLITE_CANTOPEN` / `permission denied`，在宿主机执行 `sudo chown -R 1000:1000 ./data`（容器内是 node 用户，UID 1000）。
+
+## 本地开发
+
+```bash
+npm install
+npm run dev          # API :8787
+npm run dev:web      # Vite :5173，代理 /api
+npm run build        # tsc + 前端类型检查 + vite build
+npm start
+npm test
+```
+
+只读探测（不会领取）：
+
+```bash
+npm run probe -- --cookie-file ./cookie.txt
+```
+
+## 验证记录
+
+- **34 项单元测试**：Cookie 拼装/去重/过期、作用域、URL 防护、签到账本唯一性、过期判断、状态机成功/已领/401/claim 拒绝/余额不符/schema 缺失。
+- **端到端（本地假平台，HTTPS）**：真实 Chromium 打开登录页 → 点击/输入 → 捕获 `demo_session` → summary 校验余额 500 → 加密入库 → 签到请求返回 `claimed=true, credits=100` → 复核余额 500→600、`verified=true` → 账本写入 → 第二次签到返回 `409 ALREADY_CHECKED_IN`。
+- **重新获取**：把 Cookie 过期时间改为过去 → 界面显示「登录失效」→ 点「重新登录」复用浏览器配置 → 平台直接回到 `/app`，状态「已检测到登录」→ 提取新 Cookie 成功。
+- **泄漏检查**：数据库中的 Cookie 为 `v1.…` 密文，`grep demo_session=` 在日志中出现 0 次；审计只记录账号 ID 与指纹。
+- 假平台与 demo adapter 只用于联调，位于 `test/fixtures/`，不会打进运行镜像的 `plugins/`。
+
+## 限制
+
+- 只适配了 BreezeBlue 的签到接口；其它平台目前是登录采集，不会显示成已签。
+- 不自动填写账号密码、不绕过验证码/2FA/风控；遇到挑战会在登录窗口里等你处理。
+- 浏览器登录是 headless Chromium，个别平台的登录页可能拒绝无头环境；这种情况改用手动 Cookie。
+- 不提供多用户、通知渠道、积分消费、远程插件市场。
+- 自动操作网页可能违反平台条款，账号风险自担；仅用于你本人有权操作的账号。
+
+## 归因
+
+BreezeBlue 请求形状参考 MIT 项目 [`mi-tuan/dsh-breeze-claim`](https://github.com/mi-tuan/dsh-breeze-claim)。详见 `NOTICE`。

@@ -1,0 +1,11 @@
+# NOTICE
+
+The BreezeBlue request shape in `plugins/breezeblue/adapter.json` was derived from the public MIT-licensed project:
+
+- https://github.com/mi-tuan/dsh-breeze-claim
+- `README.md` and `lib/claim.py`
+- License: MIT
+
+This repository reimplements the request in a TypeScript plugin runtime and does not vendor that project's code. The endpoint is an internal web API, not an official developer API, and may change without notice. The plugin is data-only; no third-party code is executed.
+
+BreezeBlue is a trademark of its owner. This project is not affiliated with BreezeBlue.
