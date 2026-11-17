@@ -10,7 +10,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/ysur007/checkin-agent
+  IMAGE: ghcr.io/ysur007/checkin-agent-app
 
 jobs:
   build:
