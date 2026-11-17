@@ -2994,8 +2994,7 @@ dt {
 }
 
 .risk-event-detail {
-  font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   color: var(--ink-3);
   white-space: nowrap;
   overflow: hidden;

@@ -20,6 +20,16 @@ interface Props {
   onClose: () => void;
 }
 
+function detailText(detail: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (typeof detail.status === 'string') parts.push(detail.status);
+  if (typeof detail.errorCode === 'string' && detail.errorCode) parts.push(detail.errorCode);
+  if (typeof detail.reason === 'string') parts.push(detail.reason);
+  if (typeof detail.openUntil === 'string') parts.push(`至 ${formatDateTime(detail.openUntil)}`);
+  if (typeof detail.note === 'string') parts.push(detail.note);
+  return parts.join(' · ') || '—';
+}
+
 export function RiskEventsModal({ onClose }: Props) {
   const [items, setItems] = useState<RiskEventItem[] | null>(null);
   const [error, setError] = useState('');
@@ -60,9 +70,7 @@ export function RiskEventsModal({ onClose }: Props) {
               <span className={`risk-event-kind kind-${item.kind}`}>{KIND_LABEL[item.kind] ?? item.kind}</span>
               <span className="risk-event-platform">{item.platform}</span>
               <span className="muted small">{formatDateTime(item.at)}</span>
-              <span className="risk-event-detail">
-                {Object.keys(item.detail).length > 0 ? JSON.stringify(item.detail) : '—'}
-              </span>
+              <span className="risk-event-detail">{detailText(item.detail)}</span>
             </div>
           ))}
         </div>

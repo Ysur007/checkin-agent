@@ -24,6 +24,12 @@ plugins/breezeblue/
 }
 ```
 
+自动化条款与官方 API 状态放在 `src/providers/policy.ts`，与 adapter 分开维护：
+
+- `automation: 'allowed'`：条款允许或已获明确授权；
+- `'unknown'`：默认值，低频执行并在风险面板提示条款待确认；
+- `'prohibited'`：执行器直接拒绝签到。
+
 新增平台的两条路径：
 
 1. **只做登录采集**：在 `catalog.ts` 增加一项，`checkIn: 'none'`；不需要 adapter。

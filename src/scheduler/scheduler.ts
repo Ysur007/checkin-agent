@@ -45,8 +45,9 @@ export async function tick(runner: ClaimRunner, now = new Date()): Promise<void>
     })
     .map((account) => {
       const base = minutesOfDay(account.schedule_time ?? schedule.time);
-      const offset = spread > 0 ? hashJitter(`${account.id}:${parts.date}`, spread) : 0;
-      return { account, target: Math.min(base + Math.floor(offset / 60), windowEnd) };
+      const daily = spread > 0 ? hashJitter(`${account.id}:${parts.date}`, spread) : 0;
+      const accountJitter = hashJitter(account.id, schedule.jitterSeconds);
+      return { account, target: Math.min(base + Math.floor((daily + accountJitter) / 60), windowEnd) };
     })
     .sort((a, b) => a.target - b.target);
 
