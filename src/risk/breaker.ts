@@ -254,7 +254,7 @@ export function getRiskOverview(now = Date.now()) {
       strikes: row?.strikes ?? 0,
       runs24h: runs,
       challenges24h: challenges,
-      challengeRate: runs > 0 ? Math.round((challenges / runs) * 100) : 0,
+      challengeRate: runs > 0 ? Math.min(100, Math.round((challenges / runs) * 100)) : 0,
       policy: getAutomationPolicy(platformId),
     });
   }
@@ -266,7 +266,7 @@ export function getRiskOverview(now = Date.now()) {
     totals: {
       runs24h: totalRuns,
       challenges24h: totalChallenges,
-      rate: totalRuns > 0 ? Math.round((totalChallenges / totalRuns) * 100) : 0,
+      rate: totalRuns > 0 ? Math.min(100, Math.round((totalChallenges / totalRuns) * 100)) : 0,
       events24h: countAllRiskEventsSince(since),
     },
     platforms,

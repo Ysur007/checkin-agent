@@ -16,6 +16,7 @@ export function RiskBar({ risk, busy, onPause, onReset, onEvents }: Props) {
     (platform) => platform.policy.automation === 'unknown' && platform.policy.note && platform.runs24h > 0,
   );
 
+  const historical = !risk.paused && blocked.length === 0 && halfOpen.length === 0 && risk.totals.challenges24h > 0;
   const tone = risk.paused || blocked.length > 0 ? 'bad' : halfOpen.length > 0 || risk.totals.challenges24h > 0 ? 'warn' : 'ok';
 
   const title = risk.paused
@@ -24,7 +25,9 @@ export function RiskBar({ risk, busy, onPause, onReset, onEvents }: Props) {
       ? `${blocked.map((platform) => platform.name).join('、')} 已熔断`
       : halfOpen.length > 0
         ? `${halfOpen.map((platform) => platform.name).join('、')} 处于半开验证`
-        : '风险控制正常';
+        : historical
+          ? '已恢复，观察中'
+          : '风险控制正常';
 
   const description = risk.paused
     ? '定时与手动签到都会被拦截；登录、Cookie 更新和记录查看不受影响。'
@@ -32,9 +35,11 @@ export function RiskBar({ risk, busy, onPause, onReset, onEvents }: Props) {
       ? `${blocked[0].reason ?? '连续出现验证挑战'}。到期后自动进入半开验证，只允许一次执行。`
       : halfOpen.length > 0
         ? '只允许一次真实执行；成功会自动恢复，再次遇到挑战会重新熔断。'
-        : risk.totals.runs24h === 0
-          ? '还没有自动执行记录；挑战、限流和熔断会记录在这里。'
-          : '挑战率低于阈值；执行保持串行、随机窗口，并受每小时启动上限约束。';
+        : historical
+          ? `近 24 小时仍有 ${risk.totals.challenges24h} 次挑战记录；已手动恢复，下一次执行按正常频率，再次触发会重新熔断。`
+          : risk.totals.runs24h === 0
+            ? '还没有自动执行记录；挑战、限流和熔断会记录在这里。'
+            : '挑战率低于阈值；执行保持串行、随机窗口，并受每小时启动上限约束。';
 
   return (
     <section className={`risk-bar is-${tone}`} aria-label="风险控制状态">
