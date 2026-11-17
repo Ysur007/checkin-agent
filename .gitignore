@@ -11,3 +11,6 @@ data
 .shots-final
 
 .shots-v3
+
+# local runtime data used by ad-hoc API checks
+.tmp-ext/
