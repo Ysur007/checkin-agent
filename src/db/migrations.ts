@@ -236,7 +236,26 @@ CREATE TABLE IF NOT EXISTS environment_baseline (
 );
 `;
 
-export const MIGRATION_VERSION = 5;
+/**
+ * v6：本机浏览器登录配对。
+ * 控制台生成一次性配对码，本机登录助手用码换短期令牌，再把 Cookie 回传到服务端。
+ * 服务端只存码与令牌哈希，不存明文。
+ */
+export const MIGRATION_6_SQL = `
+CREATE TABLE IF NOT EXISTS pairing_codes (
+  code TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  token_hash TEXT,
+  token_expires_at TEXT,
+  used_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS ix_pairing_expires ON pairing_codes(expires_at);
+`;
+
+export const MIGRATION_VERSION = 6;
 
 /** 旧库升级时需要补的列；新库已包含在 MIGRATION_SQL 里。 */
 export const ACCOUNT_COLUMNS_V2: Array<{ name: string; ddl: string }> = [

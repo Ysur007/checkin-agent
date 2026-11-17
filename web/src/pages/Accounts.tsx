@@ -3,6 +3,7 @@ import type { AccountDto } from '../types';
 import { del, patch, post } from '../api';
 import { formatDateTime, timeAgo } from '../format';
 import { ProviderIcon } from '../components/ProviderIcon';
+import { PairDialog } from '../components/PairDialog';
 import { IconAlert, IconCheck, IconRefresh, IconTrash } from '../components/icons';
 import type { ToastTone } from '../components/Toast';
 
@@ -17,6 +18,7 @@ interface Props {
 
 export function Accounts({ accounts, onAdd, onRelogin, onCookie, notify, onRefresh }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [pairing, setPairing] = useState<AccountDto | null>(null);
 
   const verify = async (account: AccountDto) => {
     setBusy(account.id);
@@ -166,6 +168,9 @@ export function Accounts({ accounts, onAdd, onRelogin, onCookie, notify, onRefre
                       重新登录
                     </button>
                   )}
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPairing(account)}>
+                    本机登录
+                  </button>
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => onCookie(account)}>
                     手动 Cookie
                   </button>
@@ -186,6 +191,17 @@ export function Accounts({ accounts, onAdd, onRelogin, onCookie, notify, onRefre
             );
           })}
         </div>
+      )}
+      {pairing && (
+        <PairDialog
+          account={pairing}
+          onClose={() => setPairing(null)}
+          onDone={() => {
+            setPairing(null);
+            notify('已从本机浏览器接收并加密保存 Cookie', 'success');
+            void onRefresh();
+          }}
+        />
       )}
     </div>
   );

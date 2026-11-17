@@ -3074,3 +3074,115 @@ dt {
   gap: 8px;
   margin-top: 12px;
 }
+
+/* ---------- local login pairing ---------- */
+
+.pair-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pair-code-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.pair-code {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+}
+
+.pair-ttl {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.pair-ttl.is-low {
+  color: var(--warn);
+}
+
+.pair-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--ink-2);
+}
+
+.pair-steps b {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  font-size: 9px;
+  color: var(--ink-3);
+  vertical-align: 1px;
+}
+
+.pair-steps code {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 0 3px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+
+.pair-command {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.pair-command code {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.pair-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+
+.pair-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.pair-note code {
+  font-family: var(--mono);
+  font-size: 9.5px;
+}

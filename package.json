@@ -13,7 +13,8 @@
     "typecheck:web": "tsc -p web/tsconfig.json --noEmit",
     "start": "node dist/main.js",
     "test": "vitest run",
-    "probe": "tsx src/cli/probe.ts"
+    "probe": "tsx src/cli/probe.ts",
+    "login:local": "node tools/local-login.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.1",

@@ -46,6 +46,11 @@ import {
   updateLoginSession,
   updateSessionCsrf,
   upsertPlugin,
+  createPairing,
+  getPairingByCode,
+  getPairingByTokenHash,
+  markPairingUsed,
+  setPairingToken,
   type ScheduleSettings,
 } from './db/repo.js';
 import {
@@ -309,6 +314,8 @@ export async function createApp(deps: AppDeps) {
     const pathname = (request.raw.url ?? '').split('?')[0];
     if (!pathname.startsWith('/api')) return;
     if (pathname.startsWith('/api/health') || pathname.startsWith('/api/auth')) return;
+    // 本机登录助手凭一次性配对码 / 短期令牌访问，不走控制台会话。
+    if (pathname.startsWith('/api/pair')) return;
     await requireAuth(request, reply);
     if (reply.sent) return;
     await requireCsrf(request, reply);
@@ -479,29 +486,34 @@ export async function createApp(deps: AppDeps) {
     return reply.send({ ...result, checkedAt: new Date().toISOString() });
   });
 
-  app.post('/api/accounts/:id/cookie', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const account = getAccount(id);
-    if (!account) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '账号不存在' } });
+  /**
+   * 校验并保存 Cookie：控制台手动粘贴与本机登录助手共用这一条路径，
+   * 保证加密方式、字段检查、平台只读校验完全一致。
+   */
+  const applyAccountCookie = async (
+    account: AccountRow,
+    rawCookie: unknown,
+  ): Promise<{ ok: true; warning: string | null } | { ok: false; code: string; message: string }> => {
+    const id = account.id;
     const plugin = getLoadedPlugin(account.plugin_id);
     const provider = getProvider(account.plugin_id);
     const primary = plugin?.manifest.auth.primaryCookie ?? provider?.primaryCookie ?? null;
 
-    const cookieValue = normalizeCookie((request.body as { cookie?: string })?.cookie);
+    const cookieValue = normalizeCookie(rawCookie);
     if (!cookieValue) {
-      return reply.code(400).send({
-        error: { code: 'INVALID_COOKIE', message: '请粘贴完整的 Cookie 请求头（包含 name=value，不要换行）' },
-      });
+      return { ok: false, code: 'INVALID_COOKIE', message: '请粘贴完整的 Cookie 请求头（包含 name=value，不要换行）' };
     }
-    if (primary && !cookieFields(cookieValue).includes(primary)) {
-      return reply.code(400).send({
-        error: { code: 'COOKIE_MISSING_FIELD', message: `Cookie 里没有 ${primary}，请确认登录完成后再复制` },
-      });
+    const fields = cookieFields(cookieValue);
+    if (primary && !fields.includes(primary)) {
+      return {
+        ok: false,
+        code: 'COOKIE_MISSING_FIELD',
+        message: `Cookie 里没有 ${primary}，请确认登录完成后再复制`,
+      };
     }
 
     let verified = false;
     let warning: string | null = null;
-    const fields = cookieFields(cookieValue);
     const sealed = seal(cookieValue, `account:${id}:v1`, deps.appKey);
 
     if (plugin) {
@@ -509,9 +521,7 @@ export async function createApp(deps: AppDeps) {
       if (test.error) {
         const code = test.error.code as ErrorCode;
         if (code === 'AUTH_REQUIRED' || code === 'CHALLENGE_DETECTED') {
-          return reply.code(400).send({
-            error: { code: test.error.code, message: friendlyMessage(code, test.error.message) },
-          });
+          return { ok: false, code: test.error.code, message: friendlyMessage(code, test.error.message) };
         }
         warning = `已加密保存，但校验请求失败：${friendlyMessage(code, test.error.message)}`;
       } else if (test.result) {
@@ -535,11 +545,147 @@ export async function createApp(deps: AppDeps) {
       expiresAt: null,
       verified,
       checkedAt: verified ? new Date().toISOString() : null,
-      authSource: 'manual',
+      authSource: 'browser',
     });
     audit('admin', 'cookie.update', id, { fingerprint: fingerprintCookie(cookieValue), fields: fields.length });
-    return reply.send({ account: sanitizeAccount(getAccount(id)!, localDate(getSchedule().timezone)), warning });
+    return { ok: true, warning };
+  };
+
+  app.post('/api/accounts/:id/cookie', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const account = getAccount(id);
+    if (!account) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '账号不存在' } });
+
+    const result = await applyAccountCookie(account, (request.body as { cookie?: string })?.cookie);
+    if (!result.ok) {
+      return reply.code(400).send({ error: { code: result.code, message: result.message } });
+    }
+    return reply.send({
+      account: sanitizeAccount(getAccount(id)!, localDate(getSchedule().timezone)),
+      warning: result.warning,
+    });
   });
+
+  /* ---------- local browser pairing ---------- */
+
+  const PAIR_CODE_TTL_MS = 10 * 60_000;
+  const PAIR_TOKEN_TTL_MS = 5 * 60_000;
+  const PAIR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  function randomPairCode(): string {
+    const bytes = crypto.randomBytes(8);
+    let out = '';
+    for (const byte of bytes) out += PAIR_ALPHABET[byte % PAIR_ALPHABET.length];
+    return out;
+  }
+
+  function normalizePairCode(raw: unknown): string {
+    return String(raw ?? '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+  }
+
+  // 控制台：为某个账号生成一次性配对码
+  app.post('/api/accounts/:id/pair', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const account = getAccount(id);
+    if (!account) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '账号不存在' } });
+    if (!account.enabled) {
+      return reply.code(409).send({ error: { code: 'ACCOUNT_DISABLED', message: '账号已停用' } });
+    }
+
+    const code = randomPairCode();
+    const row = createPairing(code, id, PAIR_CODE_TTL_MS);
+    audit('admin', 'pair.create', id);
+    return {
+      code: code.slice(0, 4) + '-' + code.slice(4),
+      expiresAt: row.expires_at,
+      accountLabel: account.label,
+    };
+  });
+
+  // 本机助手：用配对码换短期令牌（一次性）
+  app.get(
+    '/api/pair/:code',
+    { config: { rateLimit: { max: 20, timeWindow: '5 minutes' } } },
+    async (request, reply) => {
+      const code = normalizePairCode((request.params as { code: string }).code);
+      const row = getPairingByCode(code);
+      if (!row) {
+        return reply.code(404).send({ error: { code: 'PAIR_NOT_FOUND', message: '配对码无效，请重新生成' } });
+      }
+      if (row.used_at) {
+        return reply.code(409).send({ error: { code: 'PAIR_USED', message: '这个配对码已经用过了' } });
+      }
+      if (Date.parse(row.expires_at) < Date.now()) {
+        return reply.code(410).send({ error: { code: 'PAIR_EXPIRED', message: '配对码已过期，请重新生成' } });
+      }
+
+      const account = getAccount(row.account_id);
+      if (!account) {
+        return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '账号不存在' } });
+      }
+      const plugin = getLoadedPlugin(account.plugin_id);
+      const provider = getProvider(account.plugin_id);
+      const primary = plugin?.manifest.auth.primaryCookie ?? provider?.primaryCookie ?? null;
+      const loginUrl = provider?.loginUrl ?? account.login_url ?? null;
+
+      const token = crypto.randomBytes(32).toString('base64url');
+      setPairingToken(code, sha256(token), PAIR_TOKEN_TTL_MS);
+
+      return {
+        token,
+        accountLabel: account.label,
+        provider: {
+          id: provider?.id ?? account.plugin_id,
+          name: provider?.name ?? account.plugin_id,
+          loginUrl,
+          cookieDomains: provider?.cookieDomains ?? [],
+          primaryCookie: primary,
+        },
+        tokenExpiresAt: new Date(Date.now() + PAIR_TOKEN_TTL_MS).toISOString(),
+      };
+    },
+  );
+
+  // 本机助手：回传浏览器里的 Cookie
+  app.post(
+    '/api/pair/cookie',
+    { config: { rateLimit: { max: 20, timeWindow: '5 minutes' } } },
+    async (request, reply) => {
+      const body = request.body as { token?: string; cookie?: string };
+      const token = String(body?.token ?? '');
+      if (!token) {
+        return reply.code(400).send({ error: { code: 'PAIR_TOKEN_REQUIRED', message: '缺少配对令牌' } });
+      }
+
+      const row = getPairingByTokenHash(sha256(token));
+      if (!row || !row.token_expires_at || Date.parse(row.token_expires_at) < Date.now()) {
+        return reply.code(401).send({
+          error: { code: 'PAIR_TOKEN_INVALID', message: '配对令牌无效或已过期，请重新生成配对码' },
+        });
+      }
+      if (row.used_at) {
+        return reply.code(409).send({ error: { code: 'PAIR_USED', message: '这个配对码已经用过了' } });
+      }
+
+      const account = getAccount(row.account_id);
+      if (!account) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: '账号不存在' } });
+
+      const result = await applyAccountCookie(account, body?.cookie);
+      if (!result.ok) {
+        return reply.code(400).send({ error: { code: result.code, message: result.message } });
+      }
+
+      markPairingUsed(row.code);
+      audit('pair', 'cookie.update', account.id, { source: 'local-browser' });
+      return {
+        ok: true,
+        warning: result.warning,
+        account: sanitizeAccount(getAccount(account.id)!, localDate(getSchedule().timezone)),
+      };
+    },
+  );
 
   /* ---------- login sessions ---------- */
 

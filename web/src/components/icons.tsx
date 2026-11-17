@@ -135,3 +135,17 @@ export const IconTrash = (p: Props) => (
     <path d="M4 7h16M9.5 7V5.2c0-.7.5-1.2 1.2-1.2h2.6c.7 0 1.2.5 1.2 1.2V7M6.5 7l.8 12.1c0 .5.5.9 1 .9h7.4c.5 0 1-.4 1-.9L17.5 7M10 11v5M14 11v5" />
   </Svg>
 );
+
+export const IconCopy = (p: Props) => (
+  <Svg {...p}>
+    <rect x="9" y="9" width="10" height="10" rx="2" />
+    <path d="M13 6.5V5.2c0-.7-.5-1.2-1.2-1.2H5.2c-.7 0-1.2.5-1.2 1.2v6.6c0 .7.5 1.2 1.2 1.2h1.3" />
+  </Svg>
+);
+
+export const IconTerminal = (p: Props) => (
+  <Svg {...p}>
+    <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+    <path d="M7.5 10l2.5 2.2-2.5 2.3M12.5 14.8h4" />
+  </Svg>
+);

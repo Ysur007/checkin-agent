@@ -952,3 +952,48 @@ export function saveEnvironment(input: {
     input.samples,
   );
 }
+
+/* ---------------- local login pairing ---------------- */
+
+export interface PairingRow {
+  code: string;
+  account_id: string;
+  created_at: string;
+  expires_at: string;
+  token_hash: string | null;
+  token_expires_at: string | null;
+  used_at: string | null;
+}
+
+export function createPairing(code: string, accountId: string, ttlMs: number): PairingRow {
+  const now = Date.now();
+  db.prepare('DELETE FROM pairing_codes WHERE expires_at < ?').run(new Date(now).toISOString());
+  db.prepare(
+    'INSERT INTO pairing_codes (code, account_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
+  ).run(code, accountId, new Date(now).toISOString(), new Date(now + ttlMs).toISOString());
+  return getPairingByCode(code)!;
+}
+
+export function getPairingByCode(code: string): PairingRow | undefined {
+  return db.prepare('SELECT * FROM pairing_codes WHERE code = ?').get(code) as PairingRow | undefined;
+}
+
+export function setPairingToken(code: string, tokenHash: string, ttlMs: number): void {
+  db.prepare('UPDATE pairing_codes SET token_hash = ?, token_expires_at = ? WHERE code = ?').run(
+    tokenHash,
+    new Date(Date.now() + ttlMs).toISOString(),
+    code,
+  );
+}
+
+export function getPairingByTokenHash(tokenHash: string): PairingRow | undefined {
+  return db.prepare('SELECT * FROM pairing_codes WHERE token_hash = ?').get(tokenHash) as PairingRow | undefined;
+}
+
+export function markPairingUsed(code: string): void {
+  db.prepare('UPDATE pairing_codes SET used_at = ? WHERE code = ?').run(new Date().toISOString(), code);
+}
+
+export function dropPairing(code: string): void {
+  db.prepare('DELETE FROM pairing_codes WHERE code = ?').run(code);
+}
