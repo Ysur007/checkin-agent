@@ -16,6 +16,7 @@ services:
       BROWSER_LOGIN: "1"
       PLAYWRIGHT_CHROMIUM_PATH: /usr/bin/chromium
       COOKIE_SECURE: "0"
+      AUTOMATION_PAUSED: "1"
     mem_limit: 1280m
     security_opt:
       - no-new-privileges:true

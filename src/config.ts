@@ -19,6 +19,8 @@ const schema = z.object({
   LOGIN_ALLOW_PRIVATE: bool,
   PLAYWRIGHT_CHROMIUM_PATH: z.string().optional(),
   EGRESS_PROBE: z.string().optional().default('1'),
+  /** 首次初始化时把自动化设为暂停，用于"装好后先观察"的部署方式。 */
+  AUTOMATION_PAUSED: bool,
   EGRESS_PROBE_URL: z.string().optional().default('https://ipinfo.io/json'),
 });
 
@@ -47,5 +49,6 @@ export const config = {
   loginSessionMinutes: 12,
   profileDir: path.join(dataDir, 'profiles'),
   egressProbe: raw.EGRESS_PROBE !== '0',
+  automationPaused: raw.AUTOMATION_PAUSED,
   egressProbeUrl: raw.EGRESS_PROBE_URL,
 } as const;

@@ -3,7 +3,7 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 import { loadAppKey } from './crypto/appKey.js';
 import { db } from './db/index.js';
-import { upsertPlugin } from './db/repo.js';
+import { getSetting, setAutomationPaused, upsertPlugin } from './db/repo.js';
 import { loadBuiltinPlugins } from './plugins/loader.js';
 import { ClaimRunner } from './runner/claimRunner.js';
 import { startScheduler } from './scheduler/scheduler.js';
@@ -23,6 +23,12 @@ async function main(): Promise<void> {
   for (const plugin of plugins) upsertPlugin(plugin);
   if (plugins.length === 0) {
     logger.warn({ pluginDir: config.pluginDir }, 'no builtin plugins loaded');
+  }
+
+  // 首次初始化时按环境变量决定是否以暂停状态启动；之后以控制台设置为准。
+  if (config.automationPaused && getSetting<boolean | undefined>('automationPaused', undefined) === undefined) {
+    setAutomationPaused(true);
+    logger.info('automation initialised as paused (AUTOMATION_PAUSED=1)');
   }
 
   const runner = new ClaimRunner(appKey.key);
