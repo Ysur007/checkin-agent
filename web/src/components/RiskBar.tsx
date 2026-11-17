@@ -64,7 +64,7 @@ export function RiskBar({ risk, busy, onPause, onReset, onAck, onCanary, onEnvAc
             : canary.length > 0
               ? `${canary[0].rollout.canaryLabel ?? '金丝雀账号'} 先行执行，连续 ${canary[0].rollout.requiredDays} 天成功后才会放开同平台其它账号。`
               : historical
-                ? `近 24 小时仍有 ${risk.totals.challenges24h} 次挑战记录；已手动恢复，下一次执行按正常频率，再次触发会重新熔断。`
+                ? `近 24 小时有 ${risk.totals.challenges24h} 次挑战记录；当前按正常频率执行，再次触发会重新熔断。`
                 : risk.totals.runs24h === 0
                   ? '还没有自动执行记录；挑战、限流和熔断会记录在这里。'
                   : '挑战率低于阈值；执行保持串行、随机窗口，并受每小时启动上限约束。';
@@ -152,7 +152,7 @@ export function RiskBar({ risk, busy, onPause, onReset, onAck, onCanary, onEnvAc
 
       {env.ip && (env.drift !== 'none' || env.lastError) && (
         <p className="risk-policy">
-          出口 <code>{env.ip}</code>
+          基线出口 <code>{env.ip}</code>
           {env.country ? ` · ${env.country}` : ''}
           {env.org ? ` · ${env.org}` : ''}
           {env.drift === 'minor' ? ' · 同地区 IP 变动，已自动沿用新出口' : ''}

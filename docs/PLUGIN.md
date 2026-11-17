@@ -30,6 +30,8 @@ plugins/breezeblue/
 - `'unknown'`：默认值，低频执行并在风险面板提示条款待确认；
 - `'prohibited'`：执行器直接拒绝签到。
 
+改完 adapter 后建议先在该平台开启金丝雀：只让一个账号执行，连续 2 天成功再放开。灰度状态存在 `platform_rollout`，可用 `POST /api/risk/canary` 控制。
+
 新增平台的两条路径：
 
 1. **只做登录采集**：在 `catalog.ts` 增加一项，`checkIn: 'none'`；不需要 adapter。
