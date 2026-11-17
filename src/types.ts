@@ -235,3 +235,32 @@ export interface RiskEventRow {
   kind: string;
   detail: string | null;
 }
+
+
+export type RolloutStage = 'open' | 'canary';
+
+export interface RolloutRow {
+  platform_id: string;
+  stage: RolloutStage;
+  canary_account_id: string | null;
+  started_at: string | null;
+  success_days: number;
+  last_success_date: string | null;
+  plugin_version: string | null;
+  note: string | null;
+  updated_at: string;
+}
+
+export type EnvironmentDrift = 'none' | 'minor' | 'major';
+
+export interface EnvironmentRow {
+  scope: string;
+  ip: string | null;
+  country: string | null;
+  org: string | null;
+  checked_at: string;
+  changed_at: string | null;
+  drift: EnvironmentDrift;
+  drift_note: string | null;
+  samples: number;
+}

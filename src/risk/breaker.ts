@@ -14,6 +14,8 @@ import {
 import { getLoadedPlugin, listLoadedPlugins } from '../plugins/loader.js';
 import { CUSTOM_PROVIDER_ID, getProvider } from '../providers/catalog.js';
 import { getAutomationPolicy } from '../providers/policy.js';
+import { getEnvironmentView } from './environment.js';
+import { getRolloutView } from './rollout.js';
 import { nowIso } from '../db/repo.js';
 import type { CircuitBreakerRow, CircuitState, RunStatus } from '../types.js';
 
@@ -229,6 +231,7 @@ export interface RiskPlatformView {
   checkIn: boolean;
   policy: ReturnType<typeof getAutomationPolicy>;
   policyAcknowledged: boolean;
+  rollout: ReturnType<typeof getRolloutView>;
 }
 
 export function getRiskOverview(now = Date.now()) {
@@ -268,6 +271,7 @@ export function getRiskOverview(now = Date.now()) {
       checkIn: Boolean(getLoadedPlugin(platformId)?.adapter),
       policy: getAutomationPolicy(platformId),
       policyAcknowledged: Boolean(getPolicyAck(platformId)),
+      rollout: getRolloutView(platformId),
     });
   }
 
@@ -282,6 +286,7 @@ export function getRiskOverview(now = Date.now()) {
       events24h: countAllRiskEventsSince(since),
     },
     platforms,
+    environment: getEnvironmentView(),
     generatedAt: new Date(now).toISOString(),
   };
 }

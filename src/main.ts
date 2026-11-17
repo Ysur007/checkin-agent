@@ -10,6 +10,7 @@ import { startScheduler } from './scheduler/scheduler.js';
 import { createApp } from './api.js';
 import { createLoginManager } from './login/manager.js';
 import { sweepAccountHealth } from './accounts/health.js';
+import { refreshEnvironment } from './risk/environment.js';
 
 async function main(): Promise<void> {
   const appKey = loadAppKey(config.dataDir, config.appKey);
@@ -35,6 +36,19 @@ async function main(): Promise<void> {
 
   const stopScheduler = startScheduler(runner);
 
+  // 出口探测：启动后先取一次基线，之后每小时刷新；失败只记日志，不影响签到。
+  const probeEnvironment = () => {
+    void refreshEnvironment()
+      .then((result) => {
+        if (result.drift !== 'none') logger.warn(result, 'egress environment drift detected');
+      })
+      .catch((error) => logger.warn({ error: error instanceof Error ? error.message : String(error) }, 'egress probe failed'));
+  };
+  const bootProbe = setTimeout(probeEnvironment, 4_000);
+  bootProbe.unref();
+  const envTimer = setInterval(probeEnvironment, 60 * 60_000);
+  envTimer.unref();
+
   const healthTimer = setInterval(() => {
     void sweepAccountHealth(appKey.key)
       .then((result) => {
@@ -55,6 +69,8 @@ async function main(): Promise<void> {
     logger.info({ signal }, 'shutting down');
     stopScheduler();
     clearInterval(healthTimer);
+    clearInterval(envTimer);
+    clearTimeout(bootProbe);
     await login.shutdown().catch(() => undefined);
     try {
       await app.close();

@@ -5,6 +5,7 @@ import {
   MIGRATION_2_SQL,
   MIGRATION_3_SQL,
   MIGRATION_4_SQL,
+  MIGRATION_5_SQL,
   MIGRATION_SQL,
   MIGRATION_VERSION,
 } from './migrations.js';
@@ -50,6 +51,10 @@ export function migrate(): void {
     if (current < 4) {
       db.exec(MIGRATION_4_SQL);
       markVersion(4, 'policy-acknowledgements');
+    }
+    if (current < 5) {
+      db.exec(MIGRATION_5_SQL);
+      markVersion(5, 'canary-rollout-and-environment-baseline');
     }
   });
 

@@ -274,6 +274,31 @@ export interface AuditItem {
 }
 
 
+export interface RolloutView {
+  platformId: string;
+  stage: 'open' | 'canary';
+  canaryAccountId: string | null;
+  canaryLabel: string | null;
+  successDays: number;
+  requiredDays: number;
+  startedAt: string | null;
+  note: string | null;
+}
+
+export interface EnvironmentView {
+  ip: string | null;
+  country: string | null;
+  org: string | null;
+  checkedAt: string | null;
+  changedAt: string | null;
+  drift: 'none' | 'minor' | 'major';
+  note: string | null;
+  samples: number;
+  blocked: boolean;
+  probing: boolean;
+  lastError: string | null;
+}
+
 export interface RiskPlatform {
   platformId: string;
   name: string;
@@ -289,6 +314,7 @@ export interface RiskPlatform {
   checkIn: boolean;
   policy: AutomationPolicy;
   policyAcknowledged: boolean;
+  rollout: RolloutView;
 }
 
 export interface RiskOverview {
@@ -300,6 +326,7 @@ export interface RiskOverview {
     events24h: number;
   };
   platforms: RiskPlatform[];
+  environment: EnvironmentView;
   generatedAt: string;
 }
 

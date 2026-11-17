@@ -6,6 +6,10 @@ import { db } from './index.js';
 import type {
   AccountRow,
   CircuitBreakerRow,
+  EnvironmentDrift,
+  EnvironmentRow,
+  RolloutRow,
+  RolloutStage,
   CircuitState,
   ClaimDayRow,
   LoginSessionRow,
@@ -859,4 +863,92 @@ export function platformHasActiveLock(platformId: string, now = Date.now()): boo
     .prepare('SELECT 1 AS busy FROM accounts WHERE plugin_id = ? AND lock_expires_at > ? LIMIT 1')
     .get(platformId, now) as { busy: number } | undefined;
   return Boolean(row);
+}
+
+
+/* ---------------- canary rollout ---------------- */
+
+export function getRollout(platformId: string): RolloutRow | undefined {
+  return db.prepare('SELECT * FROM platform_rollout WHERE platform_id = ?').get(platformId) as RolloutRow | undefined;
+}
+
+export function listRollouts(): RolloutRow[] {
+  return db.prepare('SELECT * FROM platform_rollout ORDER BY updated_at DESC').all() as RolloutRow[];
+}
+
+export function saveRollout(input: {
+  platformId: string;
+  stage: RolloutStage;
+  canaryAccountId: string | null;
+  startedAt: string | null;
+  successDays: number;
+  lastSuccessDate: string | null;
+  pluginVersion: string | null;
+  note: string | null;
+}): void {
+  db.prepare(
+    `INSERT INTO platform_rollout
+       (platform_id, stage, canary_account_id, started_at, success_days, last_success_date, plugin_version, note, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(platform_id) DO UPDATE SET
+       stage = excluded.stage,
+       canary_account_id = excluded.canary_account_id,
+       started_at = excluded.started_at,
+       success_days = excluded.success_days,
+       last_success_date = excluded.last_success_date,
+       plugin_version = excluded.plugin_version,
+       note = excluded.note,
+       updated_at = excluded.updated_at`,
+  ).run(
+    input.platformId,
+    input.stage,
+    input.canaryAccountId,
+    input.startedAt,
+    input.successDays,
+    input.lastSuccessDate,
+    input.pluginVersion,
+    input.note,
+    nowIso(),
+  );
+}
+
+/* ---------------- environment baseline ---------------- */
+
+export function getEnvironment(scope = 'global'): EnvironmentRow | undefined {
+  return db.prepare('SELECT * FROM environment_baseline WHERE scope = ?').get(scope) as EnvironmentRow | undefined;
+}
+
+export function saveEnvironment(input: {
+  scope?: string;
+  ip: string | null;
+  country: string | null;
+  org: string | null;
+  changedAt: string | null;
+  drift: EnvironmentDrift;
+  driftNote: string | null;
+  samples: number;
+}): void {
+  db.prepare(
+    `INSERT INTO environment_baseline (scope, ip, country, org, checked_at, changed_at, drift, drift_note, samples)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(scope) DO UPDATE SET
+       ip = excluded.ip,
+       country = excluded.country,
+       org = excluded.org,
+       checked_at = excluded.checked_at,
+       changed_at = excluded.changed_at,
+       drift = excluded.drift,
+       drift_note = excluded.drift_note,
+       samples = excluded.samples`,
+  ).run(
+    input.scope ?? 'global',
+    input.ip,
+    input.country,
+    input.org,
+    nowIso(),
+    input.changedAt,
+    input.drift,
+    input.driftNote,
+    input.samples,
+  );
 }

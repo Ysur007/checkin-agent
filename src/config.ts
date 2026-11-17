@@ -18,6 +18,8 @@ const schema = z.object({
   BROWSER_LOGIN: z.string().optional().default('1'),
   LOGIN_ALLOW_PRIVATE: bool,
   PLAYWRIGHT_CHROMIUM_PATH: z.string().optional(),
+  EGRESS_PROBE: z.string().optional().default('1'),
+  EGRESS_PROBE_URL: z.string().optional().default('https://ipinfo.io/json'),
 });
 
 const raw = schema.parse(process.env);
@@ -44,4 +46,6 @@ export const config = {
   chromiumPath: raw.PLAYWRIGHT_CHROMIUM_PATH || '',
   loginSessionMinutes: 12,
   profileDir: path.join(dataDir, 'profiles'),
+  egressProbe: raw.EGRESS_PROBE !== '0',
+  egressProbeUrl: raw.EGRESS_PROBE_URL,
 } as const;

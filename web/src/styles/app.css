@@ -3043,3 +3043,27 @@ dt {
     white-space: normal;
   }
 }
+
+/* ---------- canary + environment meta ---------- */
+
+.risk-canary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.risk-canary + .risk-canary::before {
+  content: '·';
+  margin-right: 2px;
+  color: var(--ink-4);
+}
+
+.risk-policy code {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  padding: 0 3px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+}

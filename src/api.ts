@@ -71,6 +71,8 @@ import type { ClaimRunner } from './runner/claimRunner.js';
 import { CUSTOM_PROVIDER_ID, PROVIDERS, getProvider, isKnownProvider } from './providers/catalog.js';
 import { getAutomationPolicy } from './providers/policy.js';
 import { checkPlatform, getRiskOverview, recentRiskEvents, resetAllBreakers, resetBreaker } from './risk/breaker.js';
+import { ackEnvironment, getEnvironmentView, refreshEnvironment } from './risk/environment.js';
+import { canaryHold, getRolloutView, startCanary, stopCanary } from './risk/rollout.js';
 import { accountHealth, isCookieExpired, verifyAccount } from './accounts/health.js';
 import type { LoginSessionManager } from './login/manager.js';
 import { safeDisplayUrl } from './login/url.js';
@@ -875,6 +877,8 @@ export async function createApp(deps: AppDeps) {
           'POLICY_BLOCKED',
           'POLICY_UNACKNOWLEDGED',
           'SESSION_UNHEALTHY',
+          'CANARY_HOLD',
+          'ENVIRONMENT_DRIFT',
         ].includes(result.error);
         return reply
           .code(conflict ? 409 : 500)
@@ -891,6 +895,11 @@ export async function createApp(deps: AppDeps) {
     async (request, reply) => {
       if (isAutomationPaused()) {
         return reply.code(409).send({ error: { code: 'AUTOMATION_PAUSED', message: '自动化已暂停，请先在风险面板恢复' } });
+      }
+      if (getEnvironmentView().blocked) {
+        return reply
+          .code(409)
+          .send({ error: { code: 'ENVIRONMENT_DRIFT', message: '网络出口地区或运营商已变化，请先在风险面板确认环境' } });
       }
       const body = request.body as { accountIds?: string[] } | undefined;
       const requested = Array.isArray(body?.accountIds) ? new Set(body!.accountIds!.map(String)) : null;
@@ -920,6 +929,11 @@ export async function createApp(deps: AppDeps) {
         }
         if (policy.automation === 'unknown' && !getPolicyAck(account.plugin_id)) {
           skipped.push({ accountId: account.id, label: account.label, reason: '平台条款未确认' });
+          continue;
+        }
+        const hold = canaryHold(account.plugin_id, account.id, account.label);
+        if (hold) {
+          skipped.push({ accountId: account.id, label: account.label, reason: hold });
           continue;
         }
         const health = accountHealth(account);
@@ -1140,6 +1154,39 @@ export async function createApp(deps: AppDeps) {
       audit('admin', 'risk.reset', null);
     }
     return getRiskOverview();
+  });
+
+  app.post('/api/risk/canary', async (request, reply) => {
+    const body = request.body as { platformId?: string; stage?: string } | undefined;
+    const platformId = String(body?.platformId ?? '').trim();
+    if (!platformId || !getLoadedPlugin(platformId)) {
+      return reply.code(404).send({ error: { code: 'PLATFORM_NOT_FOUND', message: '该平台没有签到适配器' } });
+    }
+    if (body?.stage === 'open') {
+      stopCanary(platformId, '控制台手动结束灰度');
+      audit('admin', 'risk.canary.stop', platformId);
+      return { rollout: getRolloutView(platformId), risk: getRiskOverview() };
+    }
+    if (body?.stage !== 'canary') {
+      return reply.code(400).send({ error: { code: 'INVALID_STAGE', message: 'stage 只能是 canary 或 open' } });
+    }
+    const rollout = startCanary(platformId, '控制台手动开始灰度');
+    if (!rollout) {
+      return reply.code(409).send({ error: { code: 'CANARY_UNAVAILABLE', message: '没有可用于灰度的可用账号' } });
+    }
+    audit('admin', 'risk.canary.start', platformId);
+    return { rollout, risk: getRiskOverview() };
+  });
+
+  app.post('/api/risk/environment/ack', async () => {
+    const environment = await ackEnvironment();
+    audit('admin', 'risk.environment.ack', environment.ip ?? null);
+    return { environment, risk: getRiskOverview() };
+  });
+
+  app.post('/api/risk/environment/refresh', async () => {
+    const result = await refreshEnvironment();
+    return { result, environment: getEnvironmentView() };
   });
 
   app.post('/api/risk/ack', async (request, reply) => {

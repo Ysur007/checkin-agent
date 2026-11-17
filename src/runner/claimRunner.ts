@@ -24,6 +24,8 @@ import { getLoadedPlugin } from '../plugins/loader.js';
 import { getProvider } from '../providers/catalog.js';
 import { getAutomationPolicy } from '../providers/policy.js';
 import { checkPlatform, recordOutcome } from '../risk/breaker.js';
+import { canaryHold, noteCanaryFailure, noteCanarySuccess } from '../risk/rollout.js';
+import { isEnvironmentBlocked } from '../risk/environment.js';
 import { accountHealth } from '../accounts/health.js';
 import { open } from '../crypto/seal.js';
 import { errorMessage, redactDetail } from '../crypto/redact.js';
@@ -66,6 +68,13 @@ export class ClaimRunner {
       return { error: 'AUTOMATION_PAUSED', message: '自动化已暂停，请在风险面板恢复后再执行' };
     }
 
+    if (input.trigger !== 'manual' && isEnvironmentBlocked()) {
+      return {
+        error: 'ENVIRONMENT_DRIFT',
+        message: '网络出口地区或运营商已变化，自动任务已暂停；请在风险面板确认环境后再执行',
+      };
+    }
+
     const policy = getAutomationPolicy(account.plugin_id);
     if (policy.automation === 'prohibited') {
       return { error: 'POLICY_BLOCKED', message: '该平台的自动化策略标记为禁止，已阻止签到' };
@@ -92,6 +101,9 @@ export class ClaimRunner {
     if (gate.halfOpen && platformHasActiveLock(plugin.id)) {
       return { error: 'CIRCUIT_BUSY', message: '平台处于半开验证，已有账号在运行，稍后再试' };
     }
+
+    const hold = canaryHold(plugin.id, account.id, account.label);
+    if (hold) return { error: 'CANARY_HOLD', message: hold };
 
     const token = newId();
     if (!acquireLock(account.id, token, Date.now() + 15 * 60_000)) {
@@ -212,6 +224,19 @@ export class ClaimRunner {
           });
         } catch (error) {
           logger.warn({ runId, accountId: account.id, error: errorMessage(error) }, 'failed to record risk outcome');
+        }
+        try {
+          if (outcome.status === 'succeeded' || outcome.status === 'already_claimed') {
+            noteCanarySuccess(plugin.id, account.id, date);
+          } else if (
+            outcome.status === 'needs_reauth' ||
+            outcome.status === 'rate_limited' ||
+            outcome.errorCode === 'CHALLENGE_DETECTED'
+          ) {
+            noteCanaryFailure(plugin.id, account.id, outcome.errorCode ?? outcome.status);
+          }
+        } catch (error) {
+          logger.warn({ runId, accountId: account.id, error: errorMessage(error) }, 'failed to update canary rollout');
         }
         updateAccountAfterRun(account.id, outcome.status, outcome.errorCode ?? null);
         if (outcome.summary) {

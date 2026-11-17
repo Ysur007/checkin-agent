@@ -205,7 +205,38 @@ CREATE TABLE IF NOT EXISTS policy_acks (
 );
 `;
 
-export const MIGRATION_VERSION = 4;
+/**
+ * v5：金丝雀灰度与出口环境基线。
+ * platform_rollout 记录某个平台是否只允许一个账号先行验证；
+ * environment_baseline 记录出口 IP / 国家 / 运营商，用于发现网络环境突变。
+ */
+export const MIGRATION_5_SQL = `
+CREATE TABLE IF NOT EXISTS platform_rollout (
+  platform_id TEXT PRIMARY KEY,
+  stage TEXT NOT NULL DEFAULT 'open',
+  canary_account_id TEXT,
+  started_at TEXT,
+  success_days INTEGER NOT NULL DEFAULT 0,
+  last_success_date TEXT,
+  plugin_version TEXT,
+  note TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS environment_baseline (
+  scope TEXT PRIMARY KEY,
+  ip TEXT,
+  country TEXT,
+  org TEXT,
+  checked_at TEXT NOT NULL,
+  changed_at TEXT,
+  drift TEXT NOT NULL DEFAULT 'none',
+  drift_note TEXT,
+  samples INTEGER NOT NULL DEFAULT 1
+);
+`;
+
+export const MIGRATION_VERSION = 5;
 
 /** 旧库升级时需要补的列；新库已包含在 MIGRATION_SQL 里。 */
 export const ACCOUNT_COLUMNS_V2: Array<{ name: string; ddl: string }> = [

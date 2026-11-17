@@ -14,12 +14,16 @@ import { accountHealth, isCookieExpired } from '../accounts/health.js';
 import { getLoadedPlugin } from '../plugins/loader.js';
 import { getAutomationPolicy } from '../providers/policy.js';
 import { checkPlatform } from '../risk/breaker.js';
+import { canaryFilter } from '../risk/rollout.js';
+import { isEnvironmentBlocked } from '../risk/environment.js';
 import { hashJitter, localParts, minutesOfDay } from '../lib/time.js';
 import { logger } from '../logger.js';
 import type { ClaimRunner } from '../runner/claimRunner.js';
 
 export async function tick(runner: ClaimRunner, now = new Date()): Promise<void> {
   if (isAutomationPaused()) return;
+  // 出口地区/运营商变化时先停自动任务，等用户在风险面板确认环境。
+  if (isEnvironmentBlocked()) return;
 
   // 全局串行：任一账号正在运行，就不启动下一个；手动任务也计入。
   if (countActiveLocks(now.getTime()) > 0) return;
@@ -47,6 +51,8 @@ export async function tick(runner: ClaimRunner, now = new Date()): Promise<void>
       if (policy.automation === 'prohibited') return false;
       if (policy.automation === 'unknown' && !getPolicyAck(account.plugin_id)) return false;
       if (accountHealth(account).score < 60) return false;
+      // 灰度期间只有金丝雀账号参与自动执行，避免一次性把新逻辑推给所有账号。
+      if (!canaryFilter(account.plugin_id, account.id)) return false;
       return true;
     })
     .map((account) => {

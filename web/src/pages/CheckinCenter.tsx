@@ -182,6 +182,34 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
     }
   };
 
+  const toggleCanary = async (platformId: string, stage: 'canary' | 'open') => {
+    setRiskBusy(true);
+    try {
+      await post('/api/risk/canary', { platformId, stage });
+      notify(stage === 'canary' ? '已开始灰度：只允许金丝雀账号执行' : '已结束灰度，同平台其它账号恢复调度', 'success');
+      await loadRisk();
+      await onRefresh();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '灰度操作失败', 'error');
+    } finally {
+      setRiskBusy(false);
+    }
+  };
+
+  const ackEnvironment = async () => {
+    setRiskBusy(true);
+    try {
+      await post('/api/risk/environment/ack', {});
+      notify('已把当前出口设为新基线，自动任务恢复', 'success');
+      await loadRisk();
+      await onRefresh();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '确认环境失败', 'error');
+    } finally {
+      setRiskBusy(false);
+    }
+  };
+
   const resetPlatform = async (platformId?: string) => {
     setRiskBusy(true);
     try {
@@ -231,6 +259,8 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
           onPause={(paused) => void togglePause(paused)}
           onReset={(platformId) => void resetPlatform(platformId)}
           onAck={(platformId) => void ackPolicy(platformId)}
+          onCanary={(platformId, stage) => void toggleCanary(platformId, stage)}
+          onEnvAck={() => void ackEnvironment()}
           onEvents={() => setRiskEventsOpen(true)}
         />
       )}
