@@ -20,7 +20,7 @@
 |---|---|
 | 登录凭证获取 | 浏览器扩展读当前站点 Cookie（含 HttpOnly），Bearer 令牌回传；也支持手动粘贴 Cookie 头或整段 cURL |
 | 加密保存 | `AES-256-GCM`，AAD 绑定账号 ID；密钥 `/data/app.key`（0600）；接口只返回字段名、长度与指纹 |
-| 登录态维护 | 记录 `cookie_expires_at`；启动时与每 6 小时巡检；过期直接标记 `needs_reauth`，不发请求 |
+| 登录态维护 | 记录 `cookie_expires_at`；每 30 分钟扫一遍，过期直接标记 `needs_reauth` 且不再发请求；未过期的账号最多每 6 小时调一次只读 summary |
 | 签到执行 | 手动单个 / 全部 / 定时，全局串行，失败重试有上限 |
 | 防重复 | `claim_days(account_id, local_date)` 复合主键账本，数据库层挡住重复 |
 | 结果记录 | 每次运行记录 HTTP 状态、耗时、字节数、requestId、领取前后余额与复核结论；记录按天聚合 |
@@ -73,9 +73,9 @@ docker compose up -d --build
       ├─ 网络/5xx → 保存但标记未验证，返回 warning
       └─ 通过 → AES-256-GCM 加密写库，记录过期时间与指纹
 
-巡检（启动 + 每 6 小时）
+巡检（服务启动后每 30 分钟扫一遍）
   → cookie_expires_at 已过 → needs_reauth（不发请求）
-  → 未过期且 6 小时未校验 → 调 summary
+  → 未过期且距上次校验 ≥6 小时 → 调 summary
       ├─ 401/403 → needs_reauth
       └─ 其它错误 → 保留原状态，记录错误码
 
@@ -119,7 +119,7 @@ adapter 需要声明：主 Cookie 名、Cookie 域、summary 与 claim 的 metho
 ## 安全模型
 
 - **单管理员**：`scrypt` 密码哈希、HttpOnly 会话 Cookie、CSRF 双提交、登录 5 次/5 分钟限流。
-- **Cookie 作用域**：扩展只提交当前站点域；服务端按平台声明的 `cookieDomains` 再校验一次，不会把别的站点登录态带进来。
+- **Cookie 来源**：扩展只读当前标签所属站点的 Cookie，不遍历其它站点；服务端保存前再校验主 Cookie（`breeze_blue_session`）是否存在，并用平台只读接口验一次真实有效性——无效的 Cookie 存不进来。
 - **加密**：AES-256-GCM，AAD 绑定账号 ID，密钥 `/data/app.key`（0600）。数据库里没有明文 Cookie。
 - **扩展令牌**：只存哈希，明文只在生成时显示一次，可单独吊销。
 - **不回显**：账号接口只给字段名、长度、指纹、过期时间；日志里 `cookie` / `authorization` / `token` / `password` 一律替换为 `***`。
