@@ -12,6 +12,7 @@ import { db } from './db/index.js';
 import {
   applyAccountProfile,
   audit,
+  markAccountCookieVerified,
   nextAccountLabel,
   backupDatabase,
   claimDaysSince,
@@ -564,6 +565,8 @@ export async function createApp(deps: AppDeps) {
       const profile = await fetchProfileName(plugin, cookieValue, plugin.manifest.limits.timeoutMs);
       if (profile?.displayName) {
         applyAccountProfile(id, profile.displayName);
+        // 昵称接口本身需要登录态，能取到就说明 Cookie 有效（账单类平台的 summary 没有校验字段）。
+        if (!verified) markAccountCookieVerified(id);
         audit('system', 'account.profile', id, { displayName: profile.displayName });
       }
     }

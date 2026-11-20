@@ -3,6 +3,7 @@ import {
   acquireLock,
   addEvent,
   applyAccountProfile,
+  markAccountCookieVerified,
   countRunsOn,
   getAccount,
   getClaimDay,
@@ -300,7 +301,10 @@ export class ClaimRunner {
       // 老账号可能还没取过昵称：跑完顺手补一次，失败不影响本次结果。
       if (!account.display_name && plugin.adapter.profile) {
         const profile = await fetchProfileName(plugin, cookie, plugin.manifest.limits.timeoutMs);
-        if (profile?.displayName) applyAccountProfile(account.id, profile.displayName);
+        if (profile?.displayName) {
+          applyAccountProfile(account.id, profile.displayName);
+          if (!account.cookie_verified) markAccountCookieVerified(account.id);
+        }
       }
 
       finish(outcome);

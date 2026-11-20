@@ -157,14 +157,14 @@ adapter 需要声明：主 Cookie 名、Cookie 域、summary 与 claim 的 metho
 `.github/workflows/docker-image.yml` 在 push 时构建并推送到 GHCR：
 
 ```bash
-docker pull ghcr.io/ysur007/checkin-agent-app:0.2.7
+docker pull ghcr.io/ysur007/checkin-agent-app:0.2.8
 docker run -d --name checkin-agent --restart unless-stopped \
   -p 8787:8787 \
   -v /vol1/1000/docker/checkin-agent/data:/data \
   -e TZ=Asia/Shanghai \
   -e AUTOMATION_PAUSED=1 \
   -m 512m \
-  ghcr.io/ysur007/checkin-agent-app:0.2.7
+  ghcr.io/ysur007/checkin-agent-app:0.2.8
 ```
 
 `AUTOMATION_PAUSED=1` 只在**首次初始化**时生效：装好即为暂停，之后以控制台开关为准，重启不会覆盖你的选择。适合「先部署观察、确认链路后再放开」。

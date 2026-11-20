@@ -1,7 +1,7 @@
 {
   "name": "checkin-agent",
   "private": true,
-  "version": "0.2.7",
+  "version": "0.2.8",
   "type": "module",
   "description": "Local-first check-in agent: browser login, encrypted cookie vault, plugin adapters",
   "scripts": {

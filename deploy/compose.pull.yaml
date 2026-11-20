@@ -1,7 +1,7 @@
 # 从 GHCR 拉取预构建镜像的部署方式（NAS 上无需构建）。
 services:
   checkin-agent:
-    image: ghcr.io/ysur007/checkin-agent-app:0.2.7
+    image: ghcr.io/ysur007/checkin-agent-app:0.2.8
     container_name: checkin-agent
     restart: unless-stopped
     ports:

@@ -175,6 +175,15 @@ export function createAccount(input: {
   return getAccount(id)!;
 }
 
+/** 昵称接口能打通，说明这份 Cookie 是有效的；账单类平台的 summary 拿不到校验字段时用它兜底。 */
+export function markAccountCookieVerified(id: string): void {
+  db.prepare('UPDATE accounts SET cookie_verified = 1, cookie_checked_at = ?, updated_at = ? WHERE id = ?').run(
+    nowIso(),
+    nowIso(),
+    id,
+  );
+}
+
 /** 同一平台下重名时追加序号，保证列表里能分清。 */
 export function nextAccountLabel(pluginId: string, base: string): string {
   const rows = db.prepare('SELECT label FROM accounts WHERE plugin_id = ?').all(pluginId) as Array<{ label: string }>;
