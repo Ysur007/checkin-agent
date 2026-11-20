@@ -124,6 +124,22 @@ plugins/breezeblue/
 
 `records`、以及 `extract` 里的每个字段都支持给候选路径数组，按顺序取第一个非空值，用来兼容上游 `Data` / `data` 两套信封。
 
+### 可选项：昵称（`profile`）
+
+同一平台往往有多个账号，靠「魔搭 ModelScope 11-20 17:30」这种时间戳名字分不清谁是谁。插件可以声明一个只读接口取昵称：
+
+```json
+"profile": {
+  "request": { "method": "GET", "path": "/api/v1/users/login/info" },
+  "extract": { "displayName": ["$.Data.NickName", "$.data.nickName"] }
+}
+```
+
+- 保存 Cookie 成功后调用一次，结果写进 `accounts.display_name`；
+- `label_source = auto` 的账号（扩展新建的）会把显示名改成昵称，重名自动加 `#2`；用户自己命名的账号（控制台创建）只记录昵称，不改名；
+- 取昵称失败一律忽略，不影响 Cookie 保存与签到；
+- 注意有些接口带副作用：魔搭的 `login/info` 同时就是「签到触发」，所以保存 Cookie 那一刻当天的额度可能就已经到账了——后续运行会从账单里读到 `already_claimed`，不会重复。
+
 ### 路径
 
 只支持 `$`、`.key`、`['key']`、`[0]`、`[*]`（取首元素）和可选链。没有过滤表达式、函数、递归；运行时不使用 `eval`。

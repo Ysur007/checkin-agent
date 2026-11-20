@@ -21,23 +21,65 @@
       "path": "/openapi/v1/magicubes/transactions?page=1&page_size=50"
     }
   },
+  "profile": {
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/users/login/info"
+    },
+    "extract": {
+      "displayName": [
+        "$.Data.NickName",
+        "$.Data.nickName",
+        "$.data.nickName",
+        "$.Data.HavanaId",
+        "$.data.havanaId"
+      ],
+      "userId": [
+        "$.Data.UserId",
+        "$.data.userId"
+      ]
+    }
+  },
   "extract": {
     "summary": {
-      "balance": ["$.Data.available_balance", "$.data.available_balance"],
-      "total": ["$.Data.total_balance", "$.data.total_balance"]
+      "balance": [
+        "$.Data.available_balance",
+        "$.data.available_balance"
+      ],
+      "total": [
+        "$.Data.total_balance",
+        "$.data.total_balance"
+      ]
     },
     "claim": {
-      "success": ["$.Success", "$.success"],
-      "code": ["$.Code", "$.code"],
-      "nickname": ["$.Data.NickName", "$.Data.nickName", "$.data.nickName", "$.data.nick_name"]
+      "success": [
+        "$.Success",
+        "$.success"
+      ],
+      "code": [
+        "$.Code",
+        "$.code"
+      ],
+      "nickname": [
+        "$.Data.NickName",
+        "$.Data.nickName",
+        "$.data.nickName",
+        "$.data.nick_name"
+      ]
     }
   },
   "ledger": {
-    "records": ["$.Data.records", "$.data.records"],
+    "records": [
+      "$.Data.records",
+      "$.data.records"
+    ],
     "dateField": "gmt_created",
     "typeField": "type",
     "typeValue": "EARN",
-    "ruleKeys": ["daily_active", "aliyun_bindlogin"],
+    "ruleKeys": [
+      "daily_active",
+      "aliyun_bindlogin"
+    ],
     "amountField": "total_amount",
     "timezone": "Asia/Shanghai"
   },
@@ -65,15 +107,21 @@
       "error": "AUTH_REQUIRED"
     },
     {
-      "status": [401],
+      "status": [
+        401
+      ],
       "error": "AUTH_REQUIRED"
     },
     {
-      "status": [403],
+      "status": [
+        403
+      ],
       "error": "CHALLENGE_DETECTED"
     },
     {
-      "status": [429],
+      "status": [
+        429
+      ],
       "error": "RATE_LIMITED"
     },
     {
@@ -88,6 +136,9 @@
   ],
   "retry": {
     "maxAttempts": 2,
-    "backoffMs": [2000, 5000]
+    "backoffMs": [
+      2000,
+      5000
+    ]
   }
 }

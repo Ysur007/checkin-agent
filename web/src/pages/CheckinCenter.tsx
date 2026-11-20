@@ -366,6 +366,9 @@ export function CheckinCenter({ data, onRefresh, onAdd, onRelogin, onCookie, onR
                               <span className="account-line-main">
                                 <strong>{account.label}</strong>
                                 <span className="muted small">
+                                  {account.displayName && account.displayName !== account.label
+                                    ? `@${account.displayName} · `
+                                    : ''}
                                   {account.authSource === 'browser' ? '浏览器登录' : '手动 Cookie'}
                                   {account.cookie.updatedAt ? ` · ${timeAgo(account.cookie.updatedAt)}更新` : ''}
                                   {account.balance !== null ? ` · 余额 ${formatNumber(account.balance)}` : ''}

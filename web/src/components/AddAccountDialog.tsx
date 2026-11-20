@@ -7,7 +7,12 @@ import { IconExternal, IconSearch, IconShield } from './icons';
 
 interface Props {
   onClose: () => void;
-  onStart: (input: { providerId: string; loginUrl?: string; label: string }) => Promise<void>;
+  onStart: (input: {
+    providerId: string;
+    loginUrl?: string;
+    label: string;
+    labelSource?: 'auto' | 'user';
+  }) => Promise<void>;
 }
 
 type Step = { kind: 'pick' } | { kind: 'prepare'; provider: ProviderCatalogItem };
@@ -18,6 +23,7 @@ export function AddAccountDialog({ onClose, onStart }: Props) {
   const [query, setQuery] = useState('');
   const [step, setStep] = useState<Step>({ kind: 'pick' });
   const [label, setLabel] = useState('');
+  const [labelEdited, setLabelEdited] = useState(false);
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -50,6 +56,7 @@ export function AddAccountDialog({ onClose, onStart }: Props) {
   const pick = (provider: ProviderCatalogItem) => {
     setStep({ kind: 'prepare', provider });
     setLabel(provider.name);
+    setLabelEdited(false);
     setUrl(provider.loginUrl ?? '');
     setError('');
   };
@@ -63,7 +70,12 @@ export function AddAccountDialog({ onClose, onStart }: Props) {
     setBusy(true);
     setError('');
     try {
-      await onStart({ providerId: step.provider.id, loginUrl: url.trim(), label: label.trim() || '新账号' });
+      await onStart({
+        providerId: step.provider.id,
+        loginUrl: url.trim(),
+        label: label.trim() || step.provider.name,
+        labelSource: labelEdited ? 'user' : 'auto',
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建账号失败');
       setBusy(false);
@@ -127,10 +139,18 @@ export function AddAccountDialog({ onClose, onStart }: Props) {
             <span className="field-label">账号备注</span>
             <input
               value={label}
-              onChange={(event) => setLabel(event.target.value)}
+              onChange={(event) => {
+                setLabel(event.target.value);
+                setLabelEdited(true);
+              }}
               maxLength={40}
               placeholder="例如：主账号"
             />
+            <span className="field-hint">
+              {labelEdited
+                ? '这个名字会保持不变。'
+                : '不改成自己起的名字时，保存登录后会换成平台返回的昵称。'}
+            </span>
           </label>
 
           <label className="field">

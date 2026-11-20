@@ -2,6 +2,7 @@ import type { AccountRow, PluginRecord, RunStatus } from '../types.js';
 import {
   acquireLock,
   addEvent,
+  applyAccountProfile,
   countRunsOn,
   getAccount,
   getClaimDay,
@@ -32,6 +33,7 @@ import { errorMessage, redactDetail } from '../crypto/redact.js';
 import { localDate } from '../lib/time.js';
 import { logger } from '../logger.js';
 import { checkInCore, type CoreOutcome } from './core.js';
+import { fetchProfileName } from './http.js';
 import { requestWithRetry } from './http.js';
 
 export type Trigger = 'schedule' | 'manual' | 'backfill';
@@ -294,6 +296,13 @@ export class ClaimRunner {
       const outcome = await checkInCore(plugin, (operation) =>
         requestWithRetry(plugin, operation, cookie, plugin.manifest.limits.timeoutMs),
       );
+
+      // 老账号可能还没取过昵称：跑完顺手补一次，失败不影响本次结果。
+      if (!account.display_name && plugin.adapter.profile) {
+        const profile = await fetchProfileName(plugin, cookie, plugin.manifest.limits.timeoutMs);
+        if (profile?.displayName) applyAccountProfile(account.id, profile.displayName);
+      }
+
       finish(outcome);
     } catch (error) {
       finish({

@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   id TEXT PRIMARY KEY,
   plugin_id TEXT NOT NULL,
   label TEXT NOT NULL,
+  display_name TEXT,
+  label_source TEXT NOT NULL DEFAULT 'user',
   enabled INTEGER NOT NULL DEFAULT 1,
   cookie_sealed TEXT,
   cookie_fp TEXT,
@@ -272,9 +274,18 @@ CREATE TABLE IF NOT EXISTS extension_tokens (
 CREATE UNIQUE INDEX IF NOT EXISTS ix_ext_token_hash ON extension_tokens(token_hash);
 `;
 
-export const MIGRATION_VERSION = 7;
+export const MIGRATION_VERSION = 8;
 
 /** 旧库升级时需要补的列；新库已包含在 MIGRATION_SQL 里。 */
+/** v8：账号昵称与名称来源（auto 可被平台昵称覆盖，user 保持用户命名）。 */
+export const ACCOUNT_COLUMNS_V8: Array<{ name: string; ddl: string }> = [
+  { name: 'display_name', ddl: 'ALTER TABLE accounts ADD COLUMN display_name TEXT' },
+  {
+    name: 'label_source',
+    ddl: "ALTER TABLE accounts ADD COLUMN label_source TEXT NOT NULL DEFAULT 'user'",
+  },
+];
+
 export const ACCOUNT_COLUMNS_V2: Array<{ name: string; ddl: string }> = [
   { name: 'cookie_expires_at', ddl: 'ALTER TABLE accounts ADD COLUMN cookie_expires_at TEXT' },
   { name: 'cookie_checked_at', ddl: 'ALTER TABLE accounts ADD COLUMN cookie_checked_at TEXT' },

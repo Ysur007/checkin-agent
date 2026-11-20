@@ -55,6 +55,9 @@ export interface HealthScore {
 export interface AccountDto {
   id: string;
   label: string;
+  /** 平台返回的昵称，可空；和 label 不同时界面上并排显示 */
+  displayName: string | null;
+  labelSource: string;
   pluginId: string;
   provider: ProviderMeta;
   enabled: boolean;

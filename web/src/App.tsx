@@ -82,7 +82,12 @@ export default function App() {
     setToday(null);
   };
 
-  const createAccount = async (input: { providerId: string; loginUrl?: string; label: string }) => {
+  const createAccount = async (input: {
+    providerId: string;
+    loginUrl?: string;
+    label: string;
+    labelSource?: 'auto' | 'user';
+  }) => {
     const result = await post<{ account: AccountDto }>('/api/accounts', input);
     setAddOpen(false);
     await loadToday();

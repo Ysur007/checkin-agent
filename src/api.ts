@@ -10,7 +10,9 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 import { db } from './db/index.js';
 import {
+  applyAccountProfile,
   audit,
+  nextAccountLabel,
   backupDatabase,
   claimDaysSince,
   countClaimDays,
@@ -71,7 +73,7 @@ import {
 } from './auth.js';
 import { getLoadedPlugin, listLoadedPlugins, loadBuiltinPlugins } from './plugins/loader.js';
 import { extractFields } from './plugins/jsonpath.js';
-import { requestWithRetry } from './runner/http.js';
+import { fetchProfileName, requestWithRetry } from './runner/http.js';
 import { friendlyMessage, type ErrorCode } from './runner/errors.js';
 import type { AccountRow, PluginRecord, RunRow } from './types.js';
 import { cookieFields, fingerprintCookie, sha256, errorMessage } from './crypto/redact.js';
@@ -156,6 +158,8 @@ function sanitizeAccount(account: AccountRow, today?: string) {
   return {
     id: account.id,
     label: account.label,
+    displayName: account.display_name,
+    labelSource: account.label_source,
     pluginId: account.plugin_id,
     provider,
     enabled: Boolean(account.enabled),
@@ -554,6 +558,15 @@ export async function createApp(deps: AppDeps) {
       authSource: 'browser',
     });
     audit('admin', 'cookie.update', id, { fingerprint: fingerprintCookie(cookieValue), fields: fields.length });
+
+    // 顺手取一次平台昵称：多个账号时靠它区分，失败不影响保存结果。
+    if (plugin?.adapter.profile) {
+      const profile = await fetchProfileName(plugin, cookieValue, plugin.manifest.limits.timeoutMs);
+      if (profile?.displayName) {
+        applyAccountProfile(id, profile.displayName);
+        audit('system', 'account.profile', id, { displayName: profile.displayName });
+      }
+    }
     return { ok: true, warning };
   };
 
@@ -696,13 +709,16 @@ export async function createApp(deps: AppDeps) {
   /* ---------- accounts: create ---------- */
 
   app.post('/api/accounts', async (request, reply) => {
-    const body = request.body as { providerId?: string; loginUrl?: string; label?: string };
+    const body = request.body as { providerId?: string; loginUrl?: string; label?: string; labelSource?: string };
     const providerId = String(body?.providerId ?? '').trim();
     if (!providerId || !isKnownProvider(providerId)) {
       return reply.code(400).send({ error: { code: 'PROVIDER_INVALID', message: '请选择平台' } });
     }
     const provider = getProvider(providerId);
-    const label = String(body?.label ?? '').trim().slice(0, 40) || provider?.name || '新账号';
+    // auto：名称由系统/平台生成，保存 Cookie 后会被昵称替换；user：用户自己命名，保留不改。
+    const labelSource = body?.labelSource === 'auto' ? 'auto' : 'user';
+    const rawLabel = String(body?.label ?? '').trim().slice(0, 40) || provider?.name || '新账号';
+    const label = labelSource === 'auto' ? nextAccountLabel(providerId, rawLabel) : rawLabel;
     const rawUrl = String(body?.loginUrl ?? '').trim() || provider?.loginUrl || '';
     if (!rawUrl) {
       return reply.code(400).send({ error: { code: 'LOGIN_URL_REQUIRED', message: '请填写这个平台的登录页地址' } });
@@ -712,6 +728,7 @@ export async function createApp(deps: AppDeps) {
       label,
       loginUrl: normalizeUrl(rawUrl),
       authSource: 'browser',
+      labelSource,
     });
     audit('admin', 'account.create', account.id, { providerId, label });
     return reply
@@ -767,6 +784,7 @@ export async function createApp(deps: AppDeps) {
         return {
           id: account.id,
           label: account.label,
+          displayName: account.display_name,
           providerId: account.plugin_id,
           providerName: provider?.name ?? account.plugin_id,
           loginUrl: account.login_url ?? provider?.loginUrl ?? null,
@@ -812,6 +830,7 @@ export async function createApp(deps: AppDeps) {
       label,
       loginUrl: normalizeUrl(rawUrl),
       authSource: 'extension',
+      labelSource: 'auto',
     });
     audit('extension', 'account.create', account.id, { providerId: provider.id, label });
     return reply.code(201).send({

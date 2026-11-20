@@ -1,5 +1,6 @@
 import { request } from 'undici';
 import type { PluginRecord, RequestSpec } from '../types.js';
+import { extractFields } from '../plugins/jsonpath.js';
 import { matchError } from '../plugins/rules.js';
 import type { RunnerError } from './errors.js';
 
@@ -35,6 +36,16 @@ export async function performRequest(
   timeoutMs: number,
 ): Promise<HttpResult> {
   const spec = (plugin.adapter.requests[operation] ?? plugin.adapter.requests.summary) as RequestSpec;
+  return performSpec(plugin, spec, cookie, timeoutMs);
+}
+
+/** 用一个显式的请求描述发一次请求（用于插件里 requests 之外的只读接口，比如昵称）。 */
+export async function performSpec(
+  plugin: PluginRecord,
+  spec: RequestSpec,
+  cookie: string,
+  timeoutMs: number,
+): Promise<HttpResult> {
   const url = new URL(spec.path, plugin.adapter.baseUrl);
   const started = Date.now();
 
@@ -125,4 +136,45 @@ export async function requestWithRetry(
   }
 
   return { error: { code: 'NETWORK', message: 'request failed', retryable: true } };
+}
+
+/**
+ * 读插件声明的昵称接口。失败一律返回 null：昵称只是显示用，不能影响签到与凭证保存。
+ */
+export async function fetchProfileName(
+  plugin: PluginRecord,
+  cookie: string,
+  timeoutMs: number,
+): Promise<{ displayName: string | null; keys: string[] } | null> {
+  const profile = plugin.adapter.profile;
+  if (!profile) return null;
+  try {
+    const result = await performSpec(plugin, profile.request, cookie, timeoutMs);
+    if (result.status < 200 || result.status >= 300) return null;
+    const raw = extractFields(result.json, profile.extract);
+
+    let displayName = '';
+    for (const key of ['displayName', 'nickname', 'name', 'userName']) {
+      const value = raw[key];
+      if (typeof value === 'string' && value.trim()) {
+        displayName = value.trim().slice(0, 40);
+        break;
+      }
+    }
+    // 没有昵称但有邮箱时，用 @ 前面的部分兜底，至少能区分账号。
+    if (!displayName) {
+      const email = typeof raw.email === 'string' ? raw.email.trim() : '';
+      const prefix = email.split('@')[0];
+      if (prefix) displayName = prefix.slice(0, 40);
+    }
+
+    const payload = result.json;
+    const keys =
+      payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? Object.keys(payload as Record<string, unknown>).slice(0, 20)
+        : [];
+    return { displayName: displayName || null, keys };
+  } catch {
+    return null;
+  }
 }

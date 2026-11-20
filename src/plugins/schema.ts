@@ -65,7 +65,7 @@ export const RuleSchema = z
   })
   .strict();
 
-const ExtractValue = z.union([z.string().max(200), z.array(z.string().max(200)).min(1).max(6)]);
+const ExtractValue = z.union([z.string().max(200), z.array(z.string().max(200)).min(1).max(12)]);
 
 const LedgerSchema = z
   .object({
@@ -96,6 +96,13 @@ export const AdapterSchema = z
       verify: z.record(ExtractValue).optional(),
     }),
     ledger: LedgerSchema.optional(),
+    profile: z
+      .object({
+        request: RequestSchema,
+        extract: z.record(ExtractValue),
+      })
+      .strict()
+      .optional(),
     rules: z.object({
       preflight: z.array(RuleSchema),
       claim: z.array(RuleSchema),

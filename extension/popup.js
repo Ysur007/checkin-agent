@@ -128,7 +128,9 @@ function fillAccounts(hostname) {
   for (const account of accounts) {
     const option = document.createElement('option');
     option.value = account.id;
-    option.textContent = `${account.label} · ${account.providerName}${account.verified ? ' · 已验证' : ''}`;
+    const nick =
+      account.displayName && account.displayName !== account.label ? `（${account.displayName}）` : '';
+    option.textContent = `${account.label}${nick} · ${account.providerName}${account.verified ? ' · 已验证' : ''}`;
     select.appendChild(option);
   }
 
@@ -239,7 +241,8 @@ async function capture() {
     const account = result.body.account;
     const verified = account?.cookie?.verified;
     const count = account?.cookie?.fields?.length ?? 0;
-    const target = created ? `新建账号「${account?.label}」` : `「${account?.label}」`;
+    const name = account?.displayName || account?.label;
+    const target = created ? `新建账号「${name}」` : `「${name}」`;
     setStatus(
       verified
         ? `已${created ? '新建并' : ''}保存到${target}，${count} 个字段，校验通过。`

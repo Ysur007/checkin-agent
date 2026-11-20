@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { config } from '../config.js';
 import {
   ACCOUNT_COLUMNS_V2,
+  ACCOUNT_COLUMNS_V8,
   MIGRATION_2_SQL,
   MIGRATION_3_SQL,
   MIGRATION_4_SQL,
@@ -65,6 +66,12 @@ export function migrate(): void {
     if (current < 7) {
       db.exec(MIGRATION_7_SQL);
       markVersion(7, 'extension-tokens');
+    }
+    if (current < 8) {
+      for (const column of ACCOUNT_COLUMNS_V8) {
+        if (!hasColumn('accounts', column.name)) db.exec(column.ddl);
+      }
+      markVersion(8, 'account-display-name');
     }
   });
 

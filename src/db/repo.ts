@@ -154,14 +154,63 @@ export function createAccount(input: {
   label: string;
   loginUrl?: string | null;
   authSource?: string;
+  /** auto：名称来自平台/系统，之后可以被平台昵称替换；user：用户自己命名，保留不改 */
+  labelSource?: 'auto' | 'user';
 }): AccountRow {
   const id = newId();
   const now = nowIso();
   db.prepare(
-    `INSERT INTO accounts (id, plugin_id, label, enabled, auth_source, login_url, status, created_at, updated_at)
-     VALUES (?, ?, ?, 1, ?, ?, 'unconfigured', ?, ?)`,
-  ).run(id, input.pluginId, input.label, input.authSource ?? 'manual', input.loginUrl ?? null, now, now);
+    `INSERT INTO accounts (id, plugin_id, label, label_source, enabled, auth_source, login_url, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 1, ?, ?, 'unconfigured', ?, ?)`,
+  ).run(
+    id,
+    input.pluginId,
+    input.label,
+    input.labelSource ?? 'user',
+    input.authSource ?? 'manual',
+    input.loginUrl ?? null,
+    now,
+    now,
+  );
   return getAccount(id)!;
+}
+
+/** 同一平台下重名时追加序号，保证列表里能分清。 */
+export function nextAccountLabel(pluginId: string, base: string): string {
+  const rows = db.prepare('SELECT label FROM accounts WHERE plugin_id = ?').all(pluginId) as Array<{ label: string }>;
+  const taken = new Set(rows.map((row) => row.label));
+  const name = base.trim().slice(0, 40) || '账号';
+  if (!taken.has(name)) return name;
+  for (let index = 2; index < 100; index += 1) {
+    const candidate = `${name} #${index}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${name} #${Date.now() % 1000}`;
+}
+
+/**
+ * 写入平台昵称。label_source=auto 的账号会顺带把显示名改成昵称，
+ * 重名时追加序号，避免两个账号在列表里长得一模一样。
+ */
+export function applyAccountProfile(id: string, displayName: string): void {
+  const row = getAccount(id);
+  if (!row) return;
+  const clean = displayName.trim().slice(0, 40);
+  if (!clean) return;
+
+  let label = row.label;
+  if (row.label_source === 'auto') {
+    const taken = (db.prepare('SELECT COUNT(*) AS count FROM accounts WHERE id != ? AND plugin_id = ? AND label = ?')
+      .get(id, row.plugin_id, clean) as { count: number }).count;
+    label = taken > 0 ? `${clean} #${taken + 1}` : clean;
+  }
+
+  db.prepare('UPDATE accounts SET display_name = ?, label = ?, updated_at = ? WHERE id = ?').run(
+    clean,
+    label,
+    nowIso(),
+    id,
+  );
 }
 
 export function deleteAccount(id: string): void {

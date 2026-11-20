@@ -11,6 +11,8 @@
 | BreezeBlue | 浏览器扩展一键回传，或粘贴 Cookie / cURL | `GET /api/credits/summary` + `POST /api/credits/daily-claim`，领取后读 summary + 余额复核 |
 | 魔搭 ModelScope | 同上（Cookie `m_session_id`） | `GET /api/v1/users/login/info` 触发当日发放，再用 `/openapi/v1/magicubes/transactions` 账单复核到账 |
 
+**账号名称**：保存 Cookie 后，服务会调一次插件声明的只读接口取昵称（魔搭读 `/api/v1/users/login/info`，BreezeBlue 读 `/api/me`；取不到昵称时用邮箱 `@` 前缀兜底）。新建账号默认走自动命名：先用「平台名 + 序号」占位，拿到昵称后替换成真实名字，重名自动加 `#2`；如果你在添加账号时自己填了名字，就保持你填的，昵称只作为副标题显示。老账号在下一次签到后也会自动补上昵称。
+
 BreezeBlue 判定成功要同时满足三件事：claim 返回 `claimed=true`、summary 里 `claimedToday=true`、余额增量不少于 credits。任何一项对不上就记为 `unverified`，**不写账本、不算成功**。
 
 魔搭没有「签到按钮」：只要带着登录态访问一次 `login/info`，平台就发放当日 200 魔粒（绑定阿里云账号再 +50）。所以它的成功判据是账单——`transactions` 里必须出现**当天、`type=EARN`、`rule_key` 为 `daily_active` / `aliyun_bindlogin`** 的记录，魔粒数取这些记录的 `total_amount` 之和。余额只作参考，因为账单入账有延迟；第一次查不到会等 2.5 秒再读一次，仍查不到就记 `unverified`。
@@ -155,14 +157,14 @@ adapter 需要声明：主 Cookie 名、Cookie 域、summary 与 claim 的 metho
 `.github/workflows/docker-image.yml` 在 push 时构建并推送到 GHCR：
 
 ```bash
-docker pull ghcr.io/ysur007/checkin-agent-app:0.2.5
+docker pull ghcr.io/ysur007/checkin-agent-app:0.2.7
 docker run -d --name checkin-agent --restart unless-stopped \
   -p 8787:8787 \
   -v /vol1/1000/docker/checkin-agent/data:/data \
   -e TZ=Asia/Shanghai \
   -e AUTOMATION_PAUSED=1 \
   -m 512m \
-  ghcr.io/ysur007/checkin-agent-app:0.2.5
+  ghcr.io/ysur007/checkin-agent-app:0.2.7
 ```
 
 `AUTOMATION_PAUSED=1` 只在**首次初始化**时生效：装好即为暂停，之后以控制台开关为准，重启不会覆盖你的选择。适合「先部署观察、确认链路后再放开」。
@@ -203,7 +205,7 @@ npm run probe -- --cookie-file ./cookie.txt
 
 ## 验证记录
 
-- **65 项单元测试**：Cookie 拼装/去重/过期、作用域推导、URL 防护、签到账本唯一性、过期判断、风险熔断/半开/恢复、会话健康分、条款确认、金丝雀推进与轮换、出口漂移分类、调度暂停与启动上限、状态机成功/已领/401/claim 拒绝/余额不符/schema 缺失、账单模式（当天过滤、规则键白名单、信封兼容、延迟重读、读不到账单不判成功）。
+- **72 项单元测试**：Cookie 拼装/去重/过期、作用域推导、URL 防护、签到账本唯一性、过期判断、风险熔断/半开/恢复、会话健康分、条款确认、金丝雀推进与轮换、出口漂移分类、调度暂停与启动上限、状态机成功/已领/401/claim 拒绝/余额不符/schema 缺失、账单模式（当天过滤、规则键白名单、信封兼容、延迟重读、读不到账单不判成功）、账号昵称（自动改名、保留用户命名、重名加序号、邮箱兜底）。
 - **端到端（本地假平台，HTTPS）**：捕获 `demo_session` → summary 校验余额 500 → 加密入库 → 签到返回 `claimed=true, credits=100` → 复核 500→600、`verified=true` → 写账本 → 第二次签到 `409 ALREADY_CHECKED_IN`。
 - **扩展链路**：无令牌 401 → 生成令牌 201 → 列表 200 → 回传 Cookie 200（verified）→ 吊销 204 → 再用 401。
 - **魔搭真实请求**：用无效 Cookie 打三个接口，都返回 401 且被正确归类为 `AUTH_REQUIRED`，不会误记成功。

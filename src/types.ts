@@ -77,6 +77,8 @@ export interface Adapter {
    * 配置后，preflight 与复核都按账单里当天的 EARN 记录判定，余额增量改为参考值。
    */
   ledger?: LedgerSpec;
+  /** 读一次只读接口拿账号昵称，用于区分同一平台的多个账号。 */
+  profile?: ProfileSpec;
   rules: {
     preflight: Rule[];
     /** 留空时按 HTTP 2xx 视为已触发，最终以复核为准。 */
@@ -93,6 +95,11 @@ export interface Adapter {
 
 /** 取值映射：值为单个路径，或按顺序尝试的候选路径数组。 */
 export type ExtractMapping = Record<string, string | string[]>;
+
+export interface ProfileSpec {
+  request: RequestSpec;
+  extract: ExtractMapping;
+}
 
 export interface LedgerSpec {
   /** 账单数组的取值路径，可给多个候选（兼容 Data / data 两种信封） */
@@ -138,6 +145,10 @@ export interface AccountRow {
   id: string;
   plugin_id: string;
   label: string;
+  /** 平台返回的昵称，用于区分同一平台的多个账号 */
+  display_name: string | null;
+  /** auto：名称由平台/系统生成，可以自动改名；user：用户自己起的名字，不覆盖 */
+  label_source: string;
   enabled: number;
   cookie_sealed: string | null;
   cookie_fp: string | null;

@@ -19,6 +19,33 @@
       "body": {}
     }
   },
+  "profile": {
+    "request": {
+      "method": "GET",
+      "path": "/api/me"
+    },
+    "extract": {
+      "displayName": [
+        "$.name",
+        "$.display_name",
+        "$.displayName",
+        "$.username",
+        "$.user.name",
+        "$.user.display_name",
+        "$.user.displayName",
+        "$.profile.name",
+        "$.account.name"
+      ],
+      "email": [
+        "$.email",
+        "$.user.email"
+      ],
+      "userId": [
+        "$.id",
+        "$.user.id"
+      ]
+    }
+  },
   "extract": {
     "summary": {
       "balance": "$.balance",
@@ -90,20 +117,28 @@
       "error": "AUTH_REQUIRED"
     },
     {
-      "status": [401],
+      "status": [
+        401
+      ],
       "error": "AUTH_REQUIRED"
     },
     {
-      "status": [403],
+      "status": [
+        403
+      ],
       "messageIncludes": "origin is not allowed",
       "error": "ORIGIN_BLOCKED"
     },
     {
-      "status": [403],
+      "status": [
+        403
+      ],
       "error": "CHALLENGE_DETECTED"
     },
     {
-      "status": [429],
+      "status": [
+        429
+      ],
       "error": "RATE_LIMITED"
     },
     {
@@ -118,6 +153,9 @@
   ],
   "retry": {
     "maxAttempts": 3,
-    "backoffMs": [1500, 3000]
+    "backoffMs": [
+      1500,
+      3000
+    ]
   }
 }

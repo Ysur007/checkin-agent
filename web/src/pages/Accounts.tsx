@@ -92,7 +92,12 @@ export function Accounts({ accounts, onAdd, onRelogin, onCookie, notify, onRefre
                   <ProviderIcon provider={account.provider} size={34} />
                   <div className="account-card-title">
                     <strong>{account.label}</strong>
-                    <span className="muted small">{account.provider.name}</span>
+                    <span className="muted small">
+                      {account.provider.name}
+                      {account.displayName && account.displayName !== account.label
+                        ? ` · ${account.displayName}`
+                        : ''}
+                    </span>
                   </div>
                   <span className={`pill pill-${broken ? 'bad' : account.cookie.configured ? 'ok' : 'muted'}`}>
                     <i />
