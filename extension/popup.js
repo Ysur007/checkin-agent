@@ -243,10 +243,12 @@ async function capture() {
     const count = account?.cookie?.fields?.length ?? 0;
     const name = account?.displayName || account?.label;
     const target = created ? `新建账号「${name}」` : `「${name}」`;
+    const twin = result.body.duplicateOf;
+    const twinNote = twin ? ` 注意：和已有账号「${twin.label}」是同一个平台身份。` : '';
     setStatus(
       verified
-        ? `已${created ? '新建并' : ''}保存到${target}，${count} 个字段，校验通过。`
-        : `已保存到${target}，但平台校验未通过：${result.body.warning || '请确认这是登录后的 Cookie'}`,
+        ? `已${created ? '新建并' : ''}保存到${target}，${count} 个字段，校验通过。${twinNote}`
+        : `已保存到${target}，但平台校验未通过：${result.body.warning || '请确认这是登录后的 Cookie'}${twinNote}`,
       verified ? 'ok' : 'bad',
     );
     await refreshAccounts(hostname);

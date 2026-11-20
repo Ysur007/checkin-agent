@@ -504,7 +504,10 @@ export async function createApp(deps: AppDeps) {
   const applyAccountCookie = async (
     account: AccountRow,
     rawCookie: unknown,
-  ): Promise<{ ok: true; warning: string | null } | { ok: false; code: string; message: string }> => {
+  ): Promise<
+    | { ok: true; warning: string | null; duplicateOf: { id: string; label: string } | null }
+    | { ok: false; code: string; message: string }
+  > => {
     const id = account.id;
     const plugin = getLoadedPlugin(account.plugin_id);
     const provider = getProvider(account.plugin_id);
@@ -561,6 +564,7 @@ export async function createApp(deps: AppDeps) {
     audit('admin', 'cookie.update', id, { fingerprint: fingerprintCookie(cookieValue), fields: fields.length });
 
     // 顺手取一次平台昵称：多个账号时靠它区分，失败不影响保存结果。
+    let duplicateOf: { id: string; label: string } | null = null;
     if (plugin?.adapter.profile) {
       const profile = await fetchProfileName(plugin, cookieValue, plugin.manifest.limits.timeoutMs);
       if (profile?.displayName) {
@@ -568,9 +572,18 @@ export async function createApp(deps: AppDeps) {
         // 昵称接口本身需要登录态，能取到就说明 Cookie 有效（账单类平台的 summary 没有校验字段）。
         if (!verified) markAccountCookieVerified(id);
         audit('system', 'account.profile', id, { displayName: profile.displayName });
+
+        // 同平台同昵称：多半是同一个平台账号存了两份，提示用户而不是悄悄合并。
+        const twin = listAccounts().find(
+          (item) =>
+            item.id !== id &&
+            item.plugin_id === account.plugin_id &&
+            item.display_name === profile.displayName,
+        );
+        if (twin) duplicateOf = { id: twin.id, label: twin.label };
       }
     }
-    return { ok: true, warning };
+    return { ok: true, warning, duplicateOf };
   };
 
   app.post('/api/accounts/:id/cookie', async (request, reply) => {
@@ -585,6 +598,7 @@ export async function createApp(deps: AppDeps) {
     return reply.send({
       account: sanitizeAccount(getAccount(id)!, localDate(getSchedule().timezone)),
       warning: result.warning,
+      duplicateOf: result.duplicateOf,
     });
   });
 
@@ -870,6 +884,7 @@ export async function createApp(deps: AppDeps) {
     return {
       ok: true,
       warning: result.warning,
+      duplicateOf: result.duplicateOf,
       account: sanitizeAccount(getAccount(account.id)!, localDate(getSchedule().timezone)),
     };
   });

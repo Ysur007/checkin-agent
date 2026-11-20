@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: checkin-agent:0.2.8
+    image: checkin-agent:0.2.9
     container_name: checkin-agent
     restart: unless-stopped
     ports:

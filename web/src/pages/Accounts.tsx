@@ -18,6 +18,14 @@ interface Props {
 export function Accounts({ accounts, onAdd, onRelogin, onCookie, notify, onRefresh }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
 
+  // 同平台出现相同昵称，通常是同一个平台账号存了两份，标出来避免误会成「被覆盖」。
+  const twinCount = new Map<string, number>();
+  for (const account of accounts) {
+    if (!account.displayName) continue;
+    const key = `${account.pluginId}:${account.displayName}`;
+    twinCount.set(key, (twinCount.get(key) ?? 0) + 1);
+  }
+
   const verify = async (account: AccountDto) => {
     setBusy(account.id);
     try {
@@ -103,6 +111,12 @@ export function Accounts({ accounts, onAdd, onRelogin, onCookie, notify, onRefre
                     <i />
                     {broken ? '登录失效' : account.cookie.configured ? '已登录' : '未登录'}
                   </span>
+                  {account.displayName && (twinCount.get(`${account.pluginId}:${account.displayName}`) ?? 0) > 1 && (
+                    <span className="pill pill-warn" title="同一平台的同一个账号存了多份，建议只保留一份">
+                      <i />
+                      同账号多份
+                    </span>
+                  )}
                 </header>
 
                 <dl className="account-facts">
