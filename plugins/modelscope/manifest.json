@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "modelscope",
+  "name": "魔搭 ModelScope",
+  "version": "1.0.0",
+  "author": "builtin",
+  "homepage": "https://modelscope.cn/magicube/usage",
+  "description": "每日登录领取 200 魔粒（绑定阿里云账号再 +50），按账单复核到账",
+  "license": "MIT",
+  "auth": {
+    "type": "cookie",
+    "primaryCookie": "m_session_id",
+    "hintUrl": "https://modelscope.cn/magicube/usage"
+  },
+  "permissions": {
+    "network": ["https://modelscope.cn"],
+    "hooks": false
+  },
+  "schedule": {
+    "timezone": "Asia/Shanghai",
+    "defaultTime": "09:10",
+    "jitterSeconds": 300,
+    "windowStart": "09:00",
+    "windowEnd": "23:59"
+  },
+  "limits": {
+    "timeoutMs": 30000,
+    "maxAttempts": 2
+  }
+}

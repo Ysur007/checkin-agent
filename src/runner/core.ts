@@ -1,6 +1,8 @@
 import type { PluginRecord, RunStatus } from '../types.js';
 import { extractFields } from '../plugins/jsonpath.js';
+import { deriveLedger, type LedgerDerived } from '../plugins/ledger.js';
 import { evaluateRules } from '../plugins/rules.js';
+import { localDate } from '../lib/time.js';
 import type { HttpOutcome, Operation } from './http.js';
 import { ERROR_STATUS, friendlyMessage, type ErrorCode, type RunnerError } from './errors.js';
 
@@ -64,6 +66,39 @@ export async function checkInCore(
   const events: CoreEvent[] = [];
   const state = (status: string) => events.push({ type: 'state', detail: { status } });
 
+  const ledgerSpec = plugin.adapter.ledger;
+  const today = localDate(ledgerSpec?.timezone ?? plugin.manifest.schedule.timezone);
+  const verifyMapping = plugin.adapter.extract.verify ?? plugin.adapter.extract.summary;
+  const verifyRules = plugin.adapter.rules.verify ?? [];
+  const claimRules = plugin.adapter.rules.claim ?? [];
+
+  /** 账单模式：读一次流水，判断今天有没有到账、到账多少。 */
+  const readLedger = async (phase: 'preflight' | 'verify'): Promise<LedgerDerived | undefined> => {
+    if (!ledgerSpec) return undefined;
+    const outcome = await call('verify');
+    if (outcome.error || !outcome.result) {
+      events.push({ type: 'error', detail: { phase, code: outcome.error?.code ?? 'LEDGER_UNAVAILABLE' } });
+      return undefined;
+    }
+    events.push({
+      type: 'response',
+      detail: {
+        operation: 'verify',
+        status: outcome.result.status,
+        bytes: outcome.result.bytes,
+        latencyMs: outcome.result.latencyMs,
+        requestId: outcome.result.requestId,
+      },
+    });
+    if (outcome.result.status < 200 || outcome.result.status >= 300) return undefined;
+    try {
+      return deriveLedger(ledgerSpec, outcome.result.json, today);
+    } catch {
+      events.push({ type: 'error', detail: { phase, code: 'LEDGER_UNREADABLE' } });
+      return undefined;
+    }
+  };
+
   try {
     state('preflight');
     const pre = await call('summary');
@@ -108,7 +143,9 @@ export async function checkInCore(
     }
 
     const balance = numberOrUndefined(summaryExtract.balance);
-    const claimedToday = boolOrUndefined(summaryExtract.claimedToday);
+    // 账单模式：summary 里没有「今天领没领」，先读流水补上这个判断。
+    const ledgerBefore = boolOrUndefined(summaryExtract.claimedToday) === undefined ? await readLedger('preflight') : undefined;
+    const claimedToday = boolOrUndefined(summaryExtract.claimedToday) ?? ledgerBefore?.claimedToday;
     const available = boolOrUndefined(summaryExtract.available);
     const amount = numberOrUndefined(summaryExtract.amount);
     const resetAt = typeof summaryExtract.resetAt === 'string' ? summaryExtract.resetAt : undefined;
@@ -127,14 +164,18 @@ export async function checkInCore(
     }
 
     const preflight = evaluateRules(plugin.adapter.rules.preflight, { summary: summaryExtract });
-    if (preflight === 'ALREADY_CLAIMED') {
+    if (preflight === 'ALREADY_CLAIMED' || claimedToday === true) {
+      const alreadyCredits = ledgerBefore?.credits ?? 0;
       return {
         status: 'already_claimed',
-        message: '今天已经领过了（summary 已确认）。',
+        message:
+          alreadyCredits > 0
+            ? `今天已经领过了，账本里今天到账 +${alreadyCredits}。`
+            : '今天已经领过了（summary 已确认）。',
         httpStatus: pre.result.status,
         preBalance: balance,
         postBalance: balance,
-        creditsIssued: 0,
+        creditsIssued: alreadyCredits,
         claimed: true,
         verified: true,
         events,
@@ -199,21 +240,27 @@ export async function checkInCore(
       );
     }
 
-    const claimed = boolOrUndefined(claimExtract.claimed);
+    const claimVerdict = claimRules.length > 0 ? evaluateRules(claimRules, { claim: claimExtract }) : null;
+    const claimed =
+      boolOrUndefined(claimExtract.claimed) ??
+      (claimVerdict === 'CLAIMED' ? true : claimVerdict === null ? undefined : false);
     const creditsIssued = numberOrUndefined(claimExtract.creditsIssued) ?? amount;
     const claimBalance = numberOrUndefined(claimExtract.balance);
 
     if (claimed !== true) {
       const race = await call('summary');
       const raceExtract = race.result ? extractFields(race.result.json, plugin.adapter.extract.summary) : {};
-      if (boolOrUndefined(raceExtract.claimedToday) === true) {
+      const raceLedger =
+        ledgerSpec && boolOrUndefined(raceExtract.claimedToday) === undefined ? await readLedger('preflight') : undefined;
+      const raceClaimed = boolOrUndefined(raceExtract.claimedToday) ?? raceLedger?.claimedToday;
+      if (raceClaimed === true) {
         return {
           status: 'already_claimed',
-          message: '领取返回未领取，但 summary 显示今天已领（并发竞态）。',
+          message: '领取返回未领取，但账本显示今天已到账（并发竞态）。',
           httpStatus: claim.result.status,
           preBalance: balance,
           postBalance: numberOrUndefined(raceExtract.balance) ?? claimBalance,
-          creditsIssued: 0,
+          creditsIssued: raceLedger?.credits ?? 0,
           claimed: true,
           verified: true,
           events,
@@ -277,7 +324,37 @@ export async function checkInCore(
     }
     if (!verify.result) throw new Error('missing verify response');
 
-    const verifyExtract = extractFields(verify.result.json, plugin.adapter.extract.summary);
+    let ledgerAfter: LedgerDerived | undefined;
+    if (ledgerSpec) {
+      try {
+        ledgerAfter = deriveLedger(ledgerSpec, verify.result.json, today);
+      } catch {
+        ledgerAfter = undefined;
+      }
+      // 平台账单有入账延迟：第一次没查到就等一会儿再读一次，仍没有才算未验证。
+      if (ledgerAfter && !ledgerAfter.claimedToday) {
+        await sleep(2500);
+        const retry = await call('verify');
+        if (!retry.error && retry.result && retry.result.status >= 200 && retry.result.status < 300) {
+          events.push({
+            type: 'response',
+            detail: {
+              operation: 'verify',
+              status: retry.result.status,
+              latencyMs: retry.result.latencyMs,
+              requestId: retry.result.requestId,
+            },
+          });
+          try {
+            const again = deriveLedger(ledgerSpec, retry.result.json, today);
+            if (again.claimedToday) ledgerAfter = again;
+          } catch {
+            /* 第二次读不到账单就沿用第一次的结论 */
+          }
+        }
+      }
+    }
+    const verifyExtract = extractFields(verify.result.json, verifyMapping);
     events.push({
       type: 'response',
       detail: {
@@ -309,16 +386,21 @@ export async function checkInCore(
     }
 
     const postBalance = numberOrUndefined(verifyExtract.balance);
-    const postClaimed = boolOrUndefined(verifyExtract.claimedToday);
-    const verifyRule = evaluateRules(plugin.adapter.rules.verify, { verify: verifyExtract });
+    const postClaimed = ledgerAfter ? ledgerAfter.claimedToday : boolOrUndefined(verifyExtract.claimedToday);
+    const issued = ledgerAfter ? ledgerAfter.credits : creditsIssued;
+    const verifyRule = verifyRules.length > 0 ? evaluateRules(verifyRules, { verify: verifyExtract }) : null;
+    const ruleOk = verifyRules.length === 0 || verifyRule === 'VERIFIED';
     const deltaOk =
       typeof balance === 'number' &&
       typeof postBalance === 'number' &&
-      typeof creditsIssued === 'number' &&
-      creditsIssued > 0 &&
-      postBalance - balance >= creditsIssued - 0.5;
+      typeof issued === 'number' &&
+      issued > 0 &&
+      postBalance - balance >= issued - 0.5;
 
-    const verified = verifyRule === 'VERIFIED' && postClaimed === true && deltaOk;
+    // 账单模式：以流水为准，余额可能延迟入账，只作参考不再作为否决条件。
+    const verified = ledgerAfter
+      ? ruleOk && postClaimed === true && ledgerAfter.credits > 0
+      : ruleOk && postClaimed === true && deltaOk;
     const summary = {
       balance: postBalance ?? claimBalance ?? balance,
       claimedToday: postClaimed ?? true,
@@ -332,13 +414,15 @@ export async function checkInCore(
       return {
         status: 'unverified',
         errorCode: 'VERIFY_MISMATCH',
-        message: deltaOk
-          ? '领取接口声称成功，但今日状态未复核通过，本次标记为未验证。'
-          : '领取接口声称成功，但余额没有按预期增加，本次标记为未验证。',
+        message: ledgerAfter
+          ? '触发成功，但账单里没有查到今天的到账记录，本次标记为未验证。'
+          : deltaOk
+            ? '领取接口声称成功，但今日状态未复核通过，本次标记为未验证。'
+            : '领取接口声称成功，但余额没有按预期增加，本次标记为未验证。',
         httpStatus: verify.result.status,
         preBalance: balance,
         postBalance,
-        creditsIssued,
+        creditsIssued: issued,
         claimed: true,
         verified: false,
         events,
@@ -349,11 +433,13 @@ export async function checkInCore(
 
     return {
       status: 'succeeded',
-      message: `已领取 +${creditsIssued}，summary 与余额均已复核。`,
+      message: ledgerAfter
+        ? `已领取 +${ledgerAfter.credits}，账单今天到账 ${ledgerAfter.matched} 笔，已复核。`
+        : `已领取 +${creditsIssued}，summary 与余额均已复核。`,
       httpStatus: verify.result.status,
       preBalance: balance,
       postBalance,
-      creditsIssued,
+      creditsIssued: issued,
       claimed: true,
       verified: true,
       events,

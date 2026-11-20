@@ -2,15 +2,18 @@
 
 本地优先的签到执行台：把浏览器里的登录态加密存进自己的 NAS，按平台调用真实签到接口，用账本保证一天只签一次，再把每一步写进可追溯的记录。
 
-目前**只接入了一个平台**：BreezeBlue。列表里出现的平台都可以直接签到，没有「先加进来、以后再说」的占位项。
+目前接入两个平台：BreezeBlue、魔搭 ModelScope。列表里出现的平台都可以直接签到，没有「先加进来、以后再说」的占位项。
 
 ## 适配情况
 
 | 平台 | 登录凭证 | 签到 |
 |---|---|---|
-| BreezeBlue | 浏览器扩展一键回传，或粘贴 Cookie / cURL | 真实调用 `GET /api/credits/summary`、`POST /api/credits/daily-claim`，领取后读 summary + 余额复核 |
+| BreezeBlue | 浏览器扩展一键回传，或粘贴 Cookie / cURL | `GET /api/credits/summary` + `POST /api/credits/daily-claim`，领取后读 summary + 余额复核 |
+| 魔搭 ModelScope | 同上（Cookie `m_session_id`） | `GET /api/v1/users/login/info` 触发当日发放，再用 `/openapi/v1/magicubes/transactions` 账单复核到账 |
 
-判定成功要同时满足三件事：claim 返回 `claimed=true`、summary 里 `claimedToday=true`、余额增量不少于 credits。任何一项对不上就记为 `unverified`，**不写账本、不算成功**。
+BreezeBlue 判定成功要同时满足三件事：claim 返回 `claimed=true`、summary 里 `claimedToday=true`、余额增量不少于 credits。任何一项对不上就记为 `unverified`，**不写账本、不算成功**。
+
+魔搭没有「签到按钮」：只要带着登录态访问一次 `login/info`，平台就发放当日 200 魔粒（绑定阿里云账号再 +50）。所以它的成功判据是账单——`transactions` 里必须出现**当天、`type=EARN`、`rule_key` 为 `daily_active` / `aliyun_bindlogin`** 的记录，魔粒数取这些记录的 `total_amount` 之和。余额只作参考，因为账单入账有延迟；第一次查不到会等 2.5 秒再读一次，仍查不到就记 `unverified`。
 
 新增平台的方式见「[新增平台](#新增平台)」。
 
@@ -152,14 +155,14 @@ adapter 需要声明：主 Cookie 名、Cookie 域、summary 与 claim 的 metho
 `.github/workflows/docker-image.yml` 在 push 时构建并推送到 GHCR：
 
 ```bash
-docker pull ghcr.io/ysur007/checkin-agent-app:0.2.4
+docker pull ghcr.io/ysur007/checkin-agent-app:0.2.5
 docker run -d --name checkin-agent --restart unless-stopped \
   -p 8787:8787 \
   -v /vol1/1000/docker/checkin-agent/data:/data \
   -e TZ=Asia/Shanghai \
   -e AUTOMATION_PAUSED=1 \
   -m 512m \
-  ghcr.io/ysur007/checkin-agent-app:0.2.4
+  ghcr.io/ysur007/checkin-agent-app:0.2.5
 ```
 
 `AUTOMATION_PAUSED=1` 只在**首次初始化**时生效：装好即为暂停，之后以控制台开关为准，重启不会覆盖你的选择。适合「先部署观察、确认链路后再放开」。
@@ -200,9 +203,10 @@ npm run probe -- --cookie-file ./cookie.txt
 
 ## 验证记录
 
-- **56 项单元测试**：Cookie 拼装/去重/过期、作用域推导、URL 防护、签到账本唯一性、过期判断、风险熔断/半开/恢复、会话健康分、条款确认、金丝雀推进与轮换、出口漂移分类、调度暂停与启动上限、状态机成功/已领/401/claim 拒绝/余额不符/schema 缺失。
+- **65 项单元测试**：Cookie 拼装/去重/过期、作用域推导、URL 防护、签到账本唯一性、过期判断、风险熔断/半开/恢复、会话健康分、条款确认、金丝雀推进与轮换、出口漂移分类、调度暂停与启动上限、状态机成功/已领/401/claim 拒绝/余额不符/schema 缺失、账单模式（当天过滤、规则键白名单、信封兼容、延迟重读、读不到账单不判成功）。
 - **端到端（本地假平台，HTTPS）**：捕获 `demo_session` → summary 校验余额 500 → 加密入库 → 签到返回 `claimed=true, credits=100` → 复核 500→600、`verified=true` → 写账本 → 第二次签到 `409 ALREADY_CHECKED_IN`。
 - **扩展链路**：无令牌 401 → 生成令牌 201 → 列表 200 → 回传 Cookie 200（verified）→ 吊销 204 → 再用 401。
+- **魔搭真实请求**：用无效 Cookie 打三个接口，都返回 401 且被正确归类为 `AUTH_REQUIRED`，不会误记成功。
 - **风险控制**：注入 3 次验证挑战 → 平台熔断、手动签到 `409 CIRCUIT_OPEN` → 控制台恢复 → 再签到真实成功；暂停开关下批量签到 `409 AUTOMATION_PAUSED`。
 - **金丝雀**：非金丝雀签到 `409 CANARY_HOLD` → 金丝雀连签 2 天成功后自动 `open`，事件记 `canary_promote`。
 - **出口漂移**：探测源切到返回 SG / AS9999 的 mock → 判定 `major`、保留旧基线、批量签到 `409 ENVIRONMENT_DRIFT` → 确认环境后写入新基线并恢复。
@@ -211,7 +215,8 @@ npm run probe -- --cookie-file ./cookie.txt
 
 ## 限制
 
-- 只适配了 BreezeBlue。列表里没有的平台就是没适配，不会用假数据凑成功。
+- 只适配了 BreezeBlue 与魔搭 ModelScope。列表里没有的平台就是没适配，不会用假数据凑成功。
+- 魔搭的 200 魔粒是「登录即发放」，服务只负责保持登录态并每天访问一次登录信息接口；它不会、也无法代替你完成邮箱验证、滑块、实名等前置条件。
 - 不自动填写账号密码，不绕过验证码 / 2FA / 风控。
 - 不提供多用户、通知渠道、积分消费、远程插件市场。
 - 自动操作网页可能违反平台条款，账号风险自担；仅用于你本人有权操作的账号。

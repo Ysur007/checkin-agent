@@ -40,6 +40,20 @@ export const PROVIDERS: ProviderDef[] = [
     category: 'agent',
     homepage: 'https://breezeblue.ai',
   },
+  {
+    id: 'modelscope',
+    name: '魔搭 ModelScope',
+    short: '魔',
+    tint: '#4f46e5',
+    description: '每日登录领 200 魔粒，绑定阿里云账号再 +50',
+    loginUrl: 'https://modelscope.cn/magicube/usage',
+    cookieDomains: ['modelscope.cn'],
+    primaryCookie: 'm_session_id',
+    checkIn: 'adapter',
+    adapterId: 'modelscope',
+    category: 'agent',
+    homepage: 'https://modelscope.cn/magicube/usage',
+  },
 ];
 
 export const CUSTOM_PROVIDER_ID = 'custom';

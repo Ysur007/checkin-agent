@@ -34,7 +34,7 @@ export async function performRequest(
   cookie: string,
   timeoutMs: number,
 ): Promise<HttpResult> {
-  const spec = (operation === 'verify' ? plugin.adapter.requests.summary : plugin.adapter.requests[operation]) as RequestSpec;
+  const spec = (plugin.adapter.requests[operation] ?? plugin.adapter.requests.summary) as RequestSpec;
   const url = new URL(spec.path, plugin.adapter.baseUrl);
   const started = Date.now();
 

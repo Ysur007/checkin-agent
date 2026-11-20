@@ -65,6 +65,20 @@ export const RuleSchema = z
   })
   .strict();
 
+const ExtractValue = z.union([z.string().max(200), z.array(z.string().max(200)).min(1).max(6)]);
+
+const LedgerSchema = z
+  .object({
+    records: z.union([z.string().max(200), z.array(z.string().max(200)).min(1).max(4)]),
+    dateField: z.string().min(1).max(80),
+    typeField: z.string().min(1).max(80).optional(),
+    typeValue: z.string().min(1).max(80).optional(),
+    ruleKeys: z.array(z.string().min(1).max(80)).max(20),
+    amountField: z.string().min(1).max(80).optional(),
+    timezone: z.string().min(1).max(60).optional(),
+  })
+  .strict();
+
 export const AdapterSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -72,12 +86,16 @@ export const AdapterSchema = z
     defaultHeaders: z.record(z.string().max(500)),
     requests: z.object({
       summary: RequestSchema,
-      claim: RequestSchema,
+      // 有些平台没有独立的签到按钮，claim 只负责「触发」，甚至可以省略。
+      claim: RequestSchema.optional(),
+      verify: RequestSchema.optional(),
     }),
     extract: z.object({
-      summary: z.record(z.string().max(200)),
-      claim: z.record(z.string().max(200)),
+      summary: z.record(ExtractValue),
+      claim: z.record(ExtractValue),
+      verify: z.record(ExtractValue).optional(),
     }),
+    ledger: LedgerSchema.optional(),
     rules: z.object({
       preflight: z.array(RuleSchema),
       claim: z.array(RuleSchema),

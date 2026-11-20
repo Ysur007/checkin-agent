@@ -27,7 +27,7 @@ const dataDir = path.resolve(raw.DATA_DIR);
 fs.mkdirSync(dataDir, { recursive: true });
 
 export const config = {
-  version: '0.2.4',
+  version: '0.2.5',
   port: raw.PORT,
   dataDir,
   dbPath: path.join(dataDir, 'checkin.db'),

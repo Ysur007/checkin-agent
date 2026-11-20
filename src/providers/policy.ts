@@ -17,6 +17,12 @@ const POLICIES: Record<string, AutomationPolicy> = {
     termsUrl: 'https://breezeblue.ai',
     note: '使用网页端 summary / daily-claim 接口，未见公开的自动化授权说明；请自行核对服务条款后再执行。',
   },
+  modelscope: {
+    automation: 'unknown',
+    officialApi: true,
+    termsUrl: 'https://modelscope.cn/docs/magicube/intro',
+    note: '魔粒是平台公开的每日登录奖励，服务只读取余额与账单并访问一次登录信息接口；未查到公开的自动化授权说明，请自行核对条款。',
+  },
   demo: {
     automation: 'allowed',
     officialApi: false,

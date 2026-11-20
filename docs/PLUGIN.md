@@ -95,6 +95,35 @@ plugins/breezeblue/
 }
 ```
 
+### 可选项：没有「领取按钮」的平台
+
+有些平台不存在独立的领取接口（例如魔搭：调用一次登录信息接口就触发当日发放）。这类平台可以：
+
+- 省略 `requests.claim`，只把 `summary` 当作状态读取；
+- 用 `requests.verify` 指向「复核请求」，缺省时复用 `summary`；
+- 用 `extract.verify` 覆盖复核响应的取值路径，缺省时复用 `extract.summary`；
+- 把 `rules.claim` 留空：HTTP 2xx 即视为已触发，最终以复核为准。
+
+### 可选项：账单模式（`ledger`）
+
+平台不给「今天领没领」的布尔值、只给流水时，配置 `ledger`：
+
+```json
+"ledger": {
+  "records": ["$.Data.records", "$.data.records"],
+  "dateField": "gmt_created",
+  "typeField": "type",
+  "typeValue": "EARN",
+  "ruleKeys": ["daily_active", "aliyun_bindlogin"],
+  "amountField": "total_amount",
+  "timezone": "Asia/Shanghai"
+}
+```
+
+配置后的行为：preflight 先读一次流水判断今天是否已到账（已到账直接返回 `already_claimed`，不再触发）；触发后再读流水，**只认**当天、`typeValue` 匹配、`rule_key` 在白名单里的记录。余额增量退化为参考值——账单入账有延迟，不能拿余额当唯一证据。第一次没查到会等待 2.5 秒重读一次，仍没有才记 `unverified`。
+
+`records`、以及 `extract` 里的每个字段都支持给候选路径数组，按顺序取第一个非空值，用来兼容上游 `Data` / `data` 两套信封。
+
 ### 路径
 
 只支持 `$`、`.key`、`['key']`、`[0]`、`[*]`（取首元素）和可选链。没有过滤表达式、函数、递归；运行时不使用 `eval`。

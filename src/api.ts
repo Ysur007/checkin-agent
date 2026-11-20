@@ -245,7 +245,12 @@ function pluginDto(plugin: PluginRecord) {
     baseUrl: plugin.adapter.baseUrl,
     requests: {
       summary: { method: plugin.adapter.requests.summary.method, path: plugin.adapter.requests.summary.path },
-      claim: { method: plugin.adapter.requests.claim.method, path: plugin.adapter.requests.claim.path },
+      claim: plugin.adapter.requests.claim
+        ? { method: plugin.adapter.requests.claim.method, path: plugin.adapter.requests.claim.path }
+        : { method: plugin.adapter.requests.summary.method, path: plugin.adapter.requests.summary.path },
+      verify: plugin.adapter.requests.verify
+        ? { method: plugin.adapter.requests.verify.method, path: plugin.adapter.requests.verify.path }
+        : null,
     },
   };
 }

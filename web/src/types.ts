@@ -134,6 +134,7 @@ export interface PluginDto {
   requests: {
     summary: { method: string; path: string };
     claim: { method: string; path: string };
+    verify?: { method: string; path: string } | null;
   };
 }
 

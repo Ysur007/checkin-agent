@@ -61,15 +61,27 @@ export interface Adapter {
   defaultHeaders: Record<string, string>;
   requests: {
     summary: RequestSpec;
-    claim: RequestSpec;
+    /** 有些平台「签到」就是访问一次首页接口（登录即到账），此时 claim 只是触发请求。 */
+    claim?: RequestSpec;
+    /** 复核请求；缺省时复用 summary。 */
+    verify?: RequestSpec;
   };
   extract: {
-    summary: Record<string, string>;
-    claim: Record<string, string>;
+    summary: ExtractMapping;
+    claim: ExtractMapping;
+    /** 复核响应的取值路径；缺省时复用 summary。 */
+    verify?: ExtractMapping;
   };
+  /**
+   * 账单模式：平台不给「今天领没领」的布尔值，只给流水。
+   * 配置后，preflight 与复核都按账单里当天的 EARN 记录判定，余额增量改为参考值。
+   */
+  ledger?: LedgerSpec;
   rules: {
     preflight: Rule[];
+    /** 留空时按 HTTP 2xx 视为已触发，最终以复核为准。 */
     claim: Rule[];
+    /** 留空时只以复核字段判定。 */
     verify: Rule[];
   };
   errors: ErrorRule[];
@@ -77,6 +89,25 @@ export interface Adapter {
     maxAttempts: number;
     backoffMs: number[];
   };
+}
+
+/** 取值映射：值为单个路径，或按顺序尝试的候选路径数组。 */
+export type ExtractMapping = Record<string, string | string[]>;
+
+export interface LedgerSpec {
+  /** 账单数组的取值路径，可给多个候选（兼容 Data / data 两种信封） */
+  records: string | string[];
+  /** 记录时间字段，取前 10 位作为日期 */
+  dateField: string;
+  /** 记录类型字段与期望值，如 type = EARN */
+  typeField?: string;
+  typeValue?: string;
+  /** 计入「每日签到」的规则键，如 daily_active */
+  ruleKeys: string[];
+  /** 计入魔粒数的字段 */
+  amountField?: string;
+  /** 账单日期所用时区，缺省用 manifest 的 timezone */
+  timezone?: string;
 }
 
 export interface PluginRecord {

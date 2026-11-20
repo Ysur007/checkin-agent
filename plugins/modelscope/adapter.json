@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "baseUrl": "https://modelscope.cn",
+  "defaultHeaders": {
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "accept": "application/json, text/plain, */*",
+    "referer": "https://modelscope.cn/magicube/usage",
+    "origin": "https://modelscope.cn"
+  },
+  "requests": {
+    "summary": {
+      "method": "GET",
+      "path": "/openapi/v1/magicubes/balance"
+    },
+    "claim": {
+      "method": "GET",
+      "path": "/api/v1/users/login/info"
+    },
+    "verify": {
+      "method": "GET",
+      "path": "/openapi/v1/magicubes/transactions?page=1&page_size=50"
+    }
+  },
+  "extract": {
+    "summary": {
+      "balance": ["$.Data.available_balance", "$.data.available_balance"],
+      "total": ["$.Data.total_balance", "$.data.total_balance"]
+    },
+    "claim": {
+      "success": ["$.Success", "$.success"],
+      "code": ["$.Code", "$.code"],
+      "nickname": ["$.Data.NickName", "$.Data.nickName", "$.data.nickName", "$.data.nick_name"]
+    }
+  },
+  "ledger": {
+    "records": ["$.Data.records", "$.data.records"],
+    "dateField": "gmt_created",
+    "typeField": "type",
+    "typeValue": "EARN",
+    "ruleKeys": ["daily_active", "aliyun_bindlogin"],
+    "amountField": "total_amount",
+    "timezone": "Asia/Shanghai"
+  },
+  "rules": {
+    "preflight": [],
+    "claim": [
+      {
+        "source": "claim",
+        "field": "success",
+        "op": "truthy",
+        "result": "CLAIMED"
+      },
+      {
+        "source": "claim",
+        "field": "success",
+        "op": "falsy",
+        "result": "CLAIM_REJECTED"
+      }
+    ],
+    "verify": []
+  },
+  "errors": [
+    {
+      "bodyCode": "InvalidAuthentication",
+      "error": "AUTH_REQUIRED"
+    },
+    {
+      "status": [401],
+      "error": "AUTH_REQUIRED"
+    },
+    {
+      "status": [403],
+      "error": "CHALLENGE_DETECTED"
+    },
+    {
+      "status": [429],
+      "error": "RATE_LIMITED"
+    },
+    {
+      "statusMin": 500,
+      "error": "HTTP_5XX",
+      "retry": true
+    },
+    {
+      "contentTypeIncludes": "text/html",
+      "error": "CHALLENGE_DETECTED"
+    }
+  ],
+  "retry": {
+    "maxAttempts": 2,
+    "backoffMs": [2000, 5000]
+  }
+}

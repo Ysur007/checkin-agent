@@ -55,10 +55,22 @@ export function getPath(value: unknown, path: string): unknown {
   return current;
 }
 
-export function extractFields(source: unknown, mapping: Record<string, string>): Record<string, unknown> {
+/**
+ * 按映射取值。同一个键可以给多个候选路径（数组），返回第一个非 undefined 的结果，
+ * 用来兼容上游 `Data` / `data` 两种信封写法。
+ */
+export function extractFields(source: unknown, mapping: Record<string, string | string[]>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const [key, path] of Object.entries(mapping)) {
-    out[key] = getPath(source, path);
+  for (const [key, paths] of Object.entries(mapping)) {
+    const list = Array.isArray(paths) ? paths : [paths];
+    out[key] = undefined;
+    for (const path of list) {
+      const value = getPath(source, path);
+      if (value !== undefined && value !== null) {
+        out[key] = value;
+        break;
+      }
+    }
   }
   return out;
 }

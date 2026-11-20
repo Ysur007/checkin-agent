@@ -10,6 +10,17 @@
         "https://breezeblue.ai"
       ],
       "status": "installed"
+    },
+    {
+      "id": "modelscope",
+      "name": "魔搭 ModelScope",
+      "version": "1.0.0",
+      "description": "每日登录领取 200 魔粒，按账单复核到账。",
+      "source": "builtin",
+      "permissions": [
+        "https://modelscope.cn"
+      ],
+      "status": "installed"
     }
   ]
 }
